@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 COPY web/ /app/web/
 
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin app \
-    && mkdir -p /app/web/uploads /app/web/outputs \
+    && mkdir -p /app/web/uploads /app/web/outputs /app/web/data/vectors \
     && chown -R app:app /app/web
 
 WORKDIR /app/web

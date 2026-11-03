@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html as html_lib
 import json
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -22,9 +23,20 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
+import vectors
+
+
+def _runtime_dir(env_name: str, default: Path) -> Path:
+    """Optional local directory override. Used by tests and the MCP process."""
+    override = os.environ.get(env_name)
+    if override:
+        return Path(override)
+    return default
+
+
 BASE = Path(__file__).resolve().parent
-UPLOADS = BASE / "uploads"
-OUTPUTS = BASE / "outputs"
+UPLOADS = _runtime_dir("GDMF_UPLOADS", BASE / "uploads")
+OUTPUTS = _runtime_dir("GDMF_OUTPUTS", BASE / "outputs")
 TEMPLATES = BASE / "templates"
 STATIC = BASE / "static"
 GALLERY_INDEX = OUTPUTS / "gallery.json"
@@ -291,10 +303,14 @@ def _ensure_session(request: Request, response: Any) -> str:
     return sid
 
 
-def _mark_agreed(request: Request) -> str:
-    """Record an active agreement. Does not invent a personal identity."""
-    sid = _valid_sid(request.cookies.get(SESSION_COOKIE)) or uuid.uuid4().hex
-    _SESSIONS[sid] = {
+def agree_session(session_id: str | None = None) -> dict[str, Any]:
+    """Record an active agreement for a session id. Does not set a cookie.
+
+    The web UI passes the cookie id. The MCP server passes the id the agent
+    already holds, or none to mint one. Either way the user id stays anonymous.
+    """
+    sid = _valid_sid(session_id) or uuid.uuid4().hex
+    record = {
         "session_id": sid,
         "consent_agreed": True,
         "agreed_at": _utc_now(),
@@ -302,7 +318,21 @@ def _mark_agreed(request: Request) -> str:
         "user_label": f"session:{sid}",
         "responsibility": dict(RESPONSIBILITY_FLAGS),
     }
-    return sid
+    _SESSIONS[sid] = record
+    return {
+        "session_id": sid,
+        "consent_agreed": True,
+        "agreed_at": record["agreed_at"],
+        "user_id": "anonymous",
+        "user_label": record["user_label"],
+        "responsibility": dict(record["responsibility"]),
+    }
+
+
+def _mark_agreed(request: Request) -> str:
+    """Record an active agreement. Does not invent a personal identity."""
+    sid = _valid_sid(request.cookies.get(SESSION_COOKIE))
+    return agree_session(sid)["session_id"]
 
 
 def _agreement(request: Request) -> dict[str, Any] | None:
@@ -815,6 +845,40 @@ def _write_sidecar(meta_name: str, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _index_output(
+    sidecar: dict[str, Any],
+    *,
+    width: int,
+    height: int,
+    descriptor: str = "",
+) -> None:
+    """Index consented job metadata locally. The sidecar is unchanged.
+
+    ``client_ip`` stays on the sidecar only. A missing agreement skips the index.
+    """
+    if not sidecar.get("consent_agreed") or not sidecar.get("session_id"):
+        return
+    vectors.index_consented_job(
+        {
+            "record_id": Path(str(sidecar["output"])).stem,
+            "session_id": sidecar.get("session_id"),
+            "created_at": sidecar.get("created_at"),
+            "user_id": sidecar.get("user_id") or "anonymous",
+            "consent_agreed": True,
+            "consent_attested": bool(sidecar.get("consent_attested")),
+            "source_id": sidecar.get("id"),
+            "output": sidecar.get("output"),
+            "preset": sidecar.get("preset"),
+            "label": sidecar.get("label"),
+            "ai_generated": True,
+            "params": sidecar.get("params") or {},
+            "descriptor": descriptor,
+            "width": width,
+            "height": height,
+        }
+    )
+
+
 def _process_one(
     source_id: str,
     params: dict[str, Any],
@@ -824,6 +888,7 @@ def _process_one(
     consent_attested: bool = False,
     session: dict[str, Any] | None = None,
     client_ip: str = "unknown",
+    descriptor: str = "",
 ) -> dict[str, Any]:
     src_path = _find_upload(source_id)
     try:
@@ -873,6 +938,7 @@ def _process_one(
     _write_sidecar(meta_name, sidecar)
     # Phase 2 hook — do not call. Sidecar JSON above is the Phase 1 record.
     # embed_imperceptible_mark(out_path, sidecar)
+    _index_output(sidecar, width=result.size[0], height=result.size[1], descriptor=descriptor)
 
     label = AI_LABEL if not preset_label else f"{AI_LABEL} · {preset_label}"
     return {
