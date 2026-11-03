@@ -1,0 +1,9 @@
+# Dev-only lint and format pins. The Docker image does not install this file.
+# `make install` / web/scripts/install.sh installs it next to web/requirements.txt.
+# Pytest extras, when present, stay in web/requirements-dev.txt and are installed too.
+#
+#   ruff  — lint (`make lint`) and format (`make format`); config in ruff.toml
+#   black — optional; config in pyproject.toml (line length 100, same as Ruff)
+
+ruff==0.17.3
+black==26.10.1

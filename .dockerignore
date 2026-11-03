@@ -1,0 +1,30 @@
+# Build context is the repo root. Patterns use ** so they match nested paths
+# (Docker's matcher does not treat a bare *.md as recursive).
+
+.git
+**/.git
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.ruff_cache
+**/.pytest_cache
+**/.mypy_cache
+**/.cache
+**/htmlcov
+**/.coverage
+**/.DS_Store
+**/*.md
+**/tests
+
+# Host tooling. The image installs web/requirements.txt only.
+requirements-dev.txt
+web/requirements-dev.txt
+web/scripts
+docs
+.github
+
+# Runtime data is created in the image; do not bake local files in.
+web/uploads/*
+web/outputs/*

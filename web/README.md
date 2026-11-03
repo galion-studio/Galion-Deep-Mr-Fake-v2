@@ -35,6 +35,10 @@ Generate responses always include `items` (before/after entries), `count`, and `
 
 ## Run
 
+From the repository root: `make install` then `make run`. CPU-only Docker: `docker compose up --build` (port 8765). Details: [../docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md).
+
+Manual equivalent:
+
 ```bash
 cd web
 python -m venv .venv
