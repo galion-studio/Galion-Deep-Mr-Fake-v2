@@ -24,6 +24,17 @@ Open http://127.0.0.1:8765 — upload an image, adjust crop/resize/brightness/co
 
 Details: [`web/README.md`](web/README.md).
 
+## Tests
+
+CPU-only. From the repository root:
+
+```bash
+pip install -r web/requirements.txt -r web/requirements-dev.txt
+python -m pytest web/tests -q
+```
+
+GitHub Actions runs that command on Ubuntu for Python 3.11 and 3.12.
+
 ## Stack fit
 
 | Constraint | Choice |

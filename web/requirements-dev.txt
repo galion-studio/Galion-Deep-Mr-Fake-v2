@@ -1,0 +1,8 @@
+# Test dependencies for the CPU-only web app.
+# Install beside the runtime requirements, from the repo root:
+#   pip install -r web/requirements.txt -r web/requirements-dev.txt
+#
+# httpx2 is what the installed Starlette TestClient imports. The older httpx
+# package still loads, but Starlette warns that it is deprecated.
+pytest>=8.3
+httpx2>=2.0
