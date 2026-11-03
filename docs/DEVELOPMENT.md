@@ -1,6 +1,6 @@
 # Development
 
-Setup for the CPU-only FastAPI app in `web/`. Product rules (consent, no zero-shot cloning, labelling) stay in `CONTRIBUTING.md`. The feature overview stays in `web/README.md`.
+Setup for the CPU-only FastAPI app in `web/`. Product rules (consent, no zero-shot cloning, labelling) stay in `CONTRIBUTING.md`. The feature overview stays in `web/README.md`. Video encode, pay-as-you-go billing, API keys, rate limits, and the GPU island are planned in [V3_PLAN.md](V3_PLAN.md) and are not part of this setup.
 
 Requires Python 3.11+ (3.12 matches the Docker image) with the stdlib `venv` module. On Debian/Ubuntu that is the `python3-venv` package. Docker is optional.
 

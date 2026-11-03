@@ -24,7 +24,7 @@ Hard locks (same as Galion Voice):
 | D2 | CPU image pipeline (Pillow + optional onnxruntime CPU) | done (MVP) | Pillow ops, presets, batch, and CPU finish modes ship. onnxruntime stays optional and is not imported |
 | D3 | Consent / provenance metadata hooks on outputs | done | Per-output sidecar beside each PNG, consent checkbox, `ai_generated: true` on the sidecar and gallery |
 | D4 | Galion One / Voice local MCP server | done (local) | stdio + loopback HTTP in `web/mcp_server.py`, local vector index in `web/data/vectors/`. Hosted fleet wiring is operator config. See [`MCP_AND_VECTOR_STORE.md`](MCP_AND_VECTOR_STORE.md) |
-| D5 | Docs: threat model, AI Act labelling checklist | planned | `docs/` |
+| D5 | Docs: threat model, AI Act labelling checklist | planned | Video labelling and paid-API refusal rules are drafted in [`V3_PLAN.md`](V3_PLAN.md). A standalone threat-model write-up is still this row. |
 
 ## V2 release checklist
 
@@ -62,9 +62,9 @@ Hard locks (same as Galion Voice):
 1. **Phase 0:** scaffold + web MVP — done
 2. **Phase 1:** CPU transform (Pillow ops, presets, batch) + output labelling — Pillow path and labelling done; onnxruntime still optional
 3. **Phase 2:** consent record + provenance sidecar — done in 0.2.0. The local Voice/One hook is the MCP server in D4 ([`MCP_AND_VECTOR_STORE.md`](MCP_AND_VECTOR_STORE.md)). Pointing a hosted Galion One or Voice process at it is operator configuration. **Not** the image-watermark phase: an imperceptible PNG mark is a later hook only (`embed_imperceptible_mark` in `web/app.py` is unimplemented and must not be called).
-4. **Phase 3:** harden for Galion One demo rack (26 CPU nodes class) — Docker/DX packaging is in place; rate limits and the rack rollout are still open
+4. **Phase 3:** harden for Galion One demo rack (26 CPU nodes class) — Docker/DX packaging is in place; CPU-rack rate limits and the rack rollout are still open. Those rack limits are separate from the paid-API limits in [`V3_PLAN.md`](V3_PLAN.md), which stay unimplemented.
 
-**V2 vs V3:** this repo’s V2 ships the image job only (upload, active consent, CPU generate, gallery). Video generation, pay-as-you-go Galion API billing, and a separate B200 GPU island are specified in [`V3_PLAN.md`](V3_PLAN.md) and are not implemented here.
+**V2 vs V3:** this repo’s V2 ships the image job only (upload, active consent, CPU generate, gallery, local MCP). Video, the pay-as-you-go Galion API, landing and billing UX, keys, rate limits, and the B200 island are specified in [`V3_PLAN.md`](V3_PLAN.md). That file is documentation. It is not a V2 deliverable.
 
 ## Out of scope (v1)
 
