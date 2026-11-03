@@ -14,6 +14,7 @@
   const conVal = document.getElementById("con-val");
 
   let sourceId = null;
+  let sourceIds = [];
 
   function setStatus(msg, isErr = false) {
     statusEl.textContent = msg || "";
@@ -51,30 +52,46 @@
     });
   });
   dropzone.addEventListener("drop", (e) => {
-    const f = e.dataTransfer?.files?.[0];
-    if (f) uploadFile(f);
+    const list = e.dataTransfer?.files;
+    if (list && list.length) uploadFiles(list);
   });
   fileInput.addEventListener("change", () => {
-    const f = fileInput.files?.[0];
-    if (f) uploadFile(f);
+    if (fileInput.files?.length) uploadFiles(fileInput.files);
   });
 
-  async function uploadFile(file) {
-    setStatus("Uploading…");
+  async function uploadFiles(fileList) {
+    const files = Array.from(fileList || []).filter(Boolean);
+    fileInput.value = "";
+    if (!files.length) return;
+    setStatus(files.length > 1 ? `Uploading ${files.length} images…` : "Uploading…");
     generateBtn.disabled = true;
     sourceId = null;
+    sourceIds = [];
     const body = new FormData();
-    body.append("file", file);
+    files.forEach((file) => body.append("files", file));
     try {
       const res = await fetch("/api/upload", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Upload failed");
-      sourceId = data.id;
-      preview.src = data.url + "?t=" + Date.now();
-      previewWrap.classList.remove("hidden");
-      meta.textContent = `${data.width}×${data.height} · ${data.format} · id ${data.id}`;
-      generateBtn.disabled = false;
-      setStatus("Ready — adjust edits, then Generate.");
+      const items = data.items || (data.id ? [data] : []);
+      sourceIds = items.map((item) => item.id).filter(Boolean);
+      sourceId = sourceIds[0] || null;
+      const first = items[0];
+      if (first) {
+        preview.src = first.url + "?t=" + Date.now();
+        previewWrap.classList.remove("hidden");
+        const idText = sourceIds.join(", ");
+        meta.textContent =
+          items.length > 1
+            ? `${items.length} images · first ${first.width}×${first.height} · ids ${idText}`
+            : `${first.width}×${first.height} · ${first.format} · id ${first.id}`;
+      }
+      refreshGenerateEnabled();
+      setStatus(
+        items.length > 1
+          ? `Ready — ${items.length} images. Adjust edits, then Generate.`
+          : "Ready — adjust edits, then Generate."
+      );
     } catch (err) {
       setStatus(err.message || String(err), true);
     }
@@ -82,31 +99,150 @@
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!sourceId) {
-      setStatus("Upload an image first.", true);
+    const ids = batchIds();
+    if (!ids.length) {
+      setStatus("Upload an image, or paste already-uploaded ids.", true);
       return;
     }
     generateBtn.disabled = true;
-    setStatus("Generating on CPU…");
+    setStatus(ids.length > 1 ? `Generating ${ids.length} images on CPU…` : "Generating on CPU…");
     const body = new FormData();
-    body.append("source_id", sourceId);
+    body.append("source_ids", ids.join(","));
+    body.append("source_id", ids[0]);
+    body.append("preset", form.elements.preset.value);
     body.append("crop", form.elements.crop.value.trim());
     body.append("max_width", form.elements.max_width.value || "0");
     body.append("brightness", form.elements.brightness.value);
     body.append("contrast", form.elements.contrast.value);
+    body.append("saturation", form.elements.saturation.value);
+    body.append("sharpness", form.elements.sharpness.value);
+    body.append("rotate", form.elements.rotate.value || "0");
+    body.append("flip", form.elements.flip.value);
     body.append("filter", form.elements.filter.value);
+    body.append("posterize", form.elements.posterize.value || "0");
+    body.append("solarize", form.elements.solarize.value || "0");
+    body.append("blur_radius", form.elements.blur_radius.value || "0");
+    body.append("colorize_black", form.elements.colorize_black.value.trim());
+    body.append("colorize_white", form.elements.colorize_white.value.trim());
+    body.append("invert", form.elements.invert.checked ? "1" : "0");
+    body.append("equalize", form.elements.equalize.checked ? "1" : "0");
     try {
       const res = await fetch("/api/generate", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Generate failed");
-      setStatus("Done — see gallery below.");
+      const n = data.count || (data.items ? data.items.length : 1);
+      const failed = (data.errors || []).length;
+      setStatus(
+        failed
+          ? `Done — ${n} result${n === 1 ? "" : "s"}, ${failed} failed.`
+          : n > 1
+            ? `Done — ${n} results in the gallery.`
+            : "Done — see gallery below."
+      );
       await loadGallery();
     } catch (err) {
       setStatus(err.message || String(err), true);
     } finally {
-      generateBtn.disabled = !sourceId;
+      refreshGenerateEnabled();
     }
   });
+
+  /* ws-ops: preset bundles + batch id field. Server remains the source of preset values. */
+  const WS_ADJUST = [
+    "brightness",
+    "contrast",
+    "saturation",
+    "sharpness",
+    "rotate",
+    "flip",
+    "filter",
+    "posterize",
+    "solarize",
+    "invert",
+    "equalize",
+    "colorize_black",
+    "colorize_white",
+    "blur_radius",
+  ];
+  const presetSelect = document.getElementById("ws-preset");
+  const presetHelp = document.getElementById("ws-preset-help");
+  const batchInput = document.getElementById("ws-source-ids");
+  const sat = form.elements.saturation;
+  const shp = form.elements.sharpness;
+  const satVal = document.getElementById("ws-sat-val");
+  const shpVal = document.getElementById("ws-shp-val");
+  let wsDefaults = {};
+  let wsPresets = [];
+
+  function batchIds() {
+    const typed = (batchInput?.value || "").trim();
+    if (typed) {
+      return typed.split(",").map((part) => part.trim()).filter(Boolean);
+    }
+    return sourceIds.slice();
+  }
+
+  function refreshGenerateEnabled() {
+    generateBtn.disabled = batchIds().length === 0;
+  }
+
+  sat.addEventListener("input", () => {
+    satVal.textContent = Number(sat.value).toFixed(2);
+  });
+  shp.addEventListener("input", () => {
+    shpVal.textContent = Number(shp.value).toFixed(2);
+  });
+  batchInput.addEventListener("input", refreshGenerateEnabled);
+
+  function setField(name, value) {
+    const el = form.elements[name];
+    if (!el) return;
+    if (el.type === "checkbox") {
+      el.checked = value === true || value === 1 || value === "1";
+    } else if (value === null || value === undefined) {
+      el.value = "";
+    } else {
+      el.value = value;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function applyPresetBundle(params) {
+    WS_ADJUST.forEach((key) => {
+      const has = Object.prototype.hasOwnProperty.call(params, key);
+      setField(key, has ? params[key] : wsDefaults[key]);
+    });
+  }
+
+  presetSelect.addEventListener("change", () => {
+    const chosen = wsPresets.find((item) => item.id === presetSelect.value);
+    presetHelp.textContent = chosen
+      ? chosen.description
+      : "Custom settings. A preset fills the edit bundle; you can still tweak a control after.";
+    applyPresetBundle(chosen ? chosen.params : {});
+  });
+
+  async function loadPresets() {
+    try {
+      const res = await fetch("/api/presets");
+      const data = await res.json();
+      if (!res.ok) return;
+      wsDefaults = data.defaults || {};
+      wsPresets = data.presets || [];
+      wsPresets.forEach((item) => {
+        const opt = document.createElement("option");
+        opt.value = item.id;
+        opt.textContent = item.label || item.id;
+        presetSelect.appendChild(opt);
+      });
+      presetHelp.textContent =
+        "Custom settings. A preset fills the edit bundle; you can still tweak a control after.";
+    } catch {
+      presetHelp.textContent = "Presets unavailable — manual edits still work.";
+    }
+  }
+
+  loadPresets();
 
   async function loadGallery() {
     try {
