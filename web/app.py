@@ -311,7 +311,9 @@ def _resolve_params(preset: str, overrides: dict[str, Any]) -> tuple[str, str, d
 
     flip = _FLIP_ALIASES.get(str(params.get("flip") or "").strip().lower())
     if flip is None:
-        raise HTTPException(status_code=400, detail="flip must be none, horizontal, vertical, or both")
+        raise HTTPException(
+            status_code=400, detail="flip must be none, horizontal, vertical, or both"
+        )
     params["flip"] = flip
 
     fname = str(params.get("filter") or "none").strip().lower()
