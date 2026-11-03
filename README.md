@@ -8,7 +8,7 @@ Galion Deep Mr Fake v2 is a **CPU/RAM-only**, consent-first toolkit for **simple
 
 ## Status
 
-Scaffold + web MVP shell. Repo: [galion-studio/Galion-Deep-Mr-Fake-v2](https://github.com/galion-studio/Galion-Deep-Mr-Fake-v2).
+**0.2.0** — runnable web UI, CPU pipeline, tests/CI, Docker/DX, consent sidecar, and AI labelling. Repo: [galion-studio/Galion-Deep-Mr-Fake-v2](https://github.com/galion-studio/Galion-Deep-Mr-Fake-v2).
 
 ## Install / usage (web MVP)
 

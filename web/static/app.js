@@ -373,17 +373,28 @@
     const after = safeMediaUrl(item.after);
     const article = document.createElement("article");
     article.className = "pair";
+    if (item.ai_generated) article.dataset.aiGenerated = "true";
     const row = document.createElement("div");
     row.className = "row";
     row.append(figure(before, "Before", "Before, original upload"), figure(after, "After", "After, AI-assisted transformed result"));
     const cap = document.createElement("div");
     cap.className = "cap";
     const label = document.createElement("div");
+    if (item.ai_generated) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = "AI-generated";
+      label.append(badge);
+    }
     const strong = document.createElement("strong");
     strong.textContent = item.label || "AI-assisted / transformed (CPU)";
     label.append(strong);
     const details = document.createElement("div");
-    details.append(item.created ? `${item.created} · ` : "");
+    const lead = [];
+    if (item.created) lead.push(item.created);
+    if (item.consent_attested === true) lead.push("consent attested");
+    else if (item.consent_attested === false) lead.push("consent not attested");
+    if (lead.length) details.append(`${lead.join(" · ")} · `);
     if (after) {
       const link = document.createElement("a");
       link.href = after;
@@ -392,6 +403,14 @@
       details.append(link);
     } else {
       details.append("Result file is unavailable.");
+    }
+    const metaUrl = safeMediaUrl(item.meta);
+    if (metaUrl) {
+      details.append(document.createTextNode(" · "));
+      const sidecar = document.createElement("a");
+      sidecar.href = metaUrl;
+      sidecar.textContent = "Sidecar";
+      details.append(sidecar);
     }
     cap.append(label, details);
     const summary = paramsLine(item.params);
@@ -645,6 +664,8 @@
     body.append("colorize_white", form.elements.colorize_white.value.trim());
     body.append("invert", form.elements.invert.checked ? "1" : "0");
     body.append("equalize", form.elements.equalize.checked ? "1" : "0");
+    const consentEl = form.elements.consent_attested;
+    body.append("consent_attested", consentEl && consentEl.checked ? "true" : "false");
     generating = true;
     syncControls();
     setStatus(ids.length > 1 ? `Generating ${ids.length} images on CPU…` : "Generating on CPU…", "progress");

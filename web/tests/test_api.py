@@ -30,6 +30,13 @@ def test_index_serves_html(client) -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+    html = response.text
+    assert "I have rights/consent to process this image" in html
+    marker = 'name="consent_attested"'
+    assert marker in html
+    tag_start = html.rfind("<input", 0, html.index(marker))
+    tag = html[tag_start : html.index(">", tag_start) + 1]
+    assert "checked" not in tag
 
 
 def test_gallery_empty(client) -> None:
@@ -325,6 +332,99 @@ def test_generate_batch_reports_partial_errors(client) -> None:
     assert body["items"][0]["id"] == source_id
     assert body["items"][0]["params"]["finish"] == "soft"
     assert body["errors"] == [{"id": "deadbeefdead", "detail": "Source image not found: deadbeefdead"}]
+
+
+def _sidecar(client, item: dict) -> dict:
+    response = client.get(item["meta"])
+    assert response.status_code == 200
+    assert "application/json" in response.headers["content-type"]
+    return response.json()
+
+
+def test_generate_consent_sidecar_covers_each_batch_output(client, app_module) -> None:
+    uploaded = client.post(
+        "/api/upload",
+        files=[
+            ("files", ("a.png", image_bytes("PNG", (12, 8), (10, 20, 30)), "image/png")),
+            ("files", ("b.png", image_bytes("PNG", (10, 10), (40, 50, 60)), "image/png")),
+        ],
+    )
+    assert uploaded.status_code == 200
+    ids = [item["id"] for item in uploaded.json()["items"]]
+
+    omitted = client.post("/api/generate", data={"source_ids": ",".join(ids), "preset": "mono"})
+    assert omitted.status_code == 200
+    omitted_body = omitted.json()
+    assert omitted_body["count"] == 2
+    assert "id" not in omitted_body
+    stems = set()
+    for item in omitted_body["items"]:
+        assert item["ai_generated"] is True
+        assert item["consent_attested"] is False
+        assert item["timestamp"]
+        assert item["label"].startswith("AI-assisted / transformed (CPU)")
+        doc = _sidecar(client, item)
+        assert doc["id"] == item["id"]
+        assert doc["label"] == "AI-assisted / transformed (CPU)"
+        assert doc["consent_attested"] is False
+        assert doc["ai_generated"] is True
+        assert doc["timestamp"] == item["timestamp"]
+        assert doc["params"] == item["params"]
+        assert doc["preset"] == "mono"
+        png_name = item["after"].rsplit("/", 1)[-1]
+        meta_name = item["meta"].rsplit("/", 1)[-1]
+        assert png_name == doc["output"]
+        assert meta_name == png_name.replace(".png", ".meta.json")
+        assert (app_module.OUTPUTS / meta_name).is_file()
+        stems.add(meta_name)
+    assert len(stems) == 2
+
+    gallery = client.get("/api/gallery").json()["items"]
+    assert [item["id"] for item in gallery] == ids
+    assert all(
+        item["ai_generated"] is True and item["consent_attested"] is False for item in gallery
+    )
+
+    attested = client.post(
+        "/api/generate",
+        data={"source_id": ids[0], "consent_attested": "true", "finish": "none"},
+    )
+    assert attested.status_code == 200
+    attested_body = attested.json()
+    assert attested_body["count"] == 1
+    assert attested_body["consent_attested"] is True
+    assert attested_body["ai_generated"] is True
+    assert attested_body["items"][0]["consent_attested"] is True
+    assert _sidecar(client, attested_body)["consent_attested"] is True
+
+    for flag in ("false", "0", "off", "no"):
+        response = client.post(
+            "/api/generate",
+            data={"source_id": ids[1], "consent_attested": flag, "finish": "none"},
+        )
+        assert response.status_code == 200
+        assert response.json()["consent_attested"] is False
+
+    invalid = client.post(
+        "/api/generate",
+        data={"source_id": ids[0], "consent_attested": "maybe"},
+    )
+    assert invalid.status_code == 400
+
+    before = {path.name for path in app_module.OUTPUTS.iterdir()}
+    mixed = client.post(
+        "/api/generate",
+        data={"source_ids": f"{ids[0]},deadbeefdead", "consent_attested": "yes"},
+    )
+    assert mixed.status_code == 200
+    mixed_body = mixed.json()
+    assert mixed_body["count"] == 1
+    assert mixed_body["items"][0]["consent_attested"] is True
+    assert mixed_body["errors"][0]["id"] == "deadbeefdead"
+    assert _sidecar(client, mixed_body["items"][0])["consent_attested"] is True
+    created = {path.name for path in app_module.OUTPUTS.iterdir()} - before
+    assert any(name.endswith(".meta.json") for name in created)
+    assert not any("deadbeefdead" in name for name in created)
 
 
 def test_upload_batch_rolls_back_when_one_file_is_invalid(client, app_module) -> None:
