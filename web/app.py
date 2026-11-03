@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
@@ -198,6 +199,47 @@ app = FastAPI(
 )
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
+_FIELD_HELP = {
+    "brightness": "Brightness must be a number between 0.1 and 3.0.",
+    "contrast": "Contrast must be a number between 0.1 and 3.0.",
+    "saturation": "Saturation must be a number between 0 and 3.",
+    "sharpness": "Sharpness must be a number between 0 and 3.",
+    "rotate": "Rotate must be a number of degrees.",
+    "max_width": "Max width must be a whole number of pixels. Use 0 to keep the original width.",
+    "posterize": "Posterize bits must be a whole number from 0 to 8. Use 0 to turn it off.",
+    "solarize": "Solarize must be a whole number from 0 to 255. Use 0 to turn it off.",
+    "blur_radius": "Blur radius must be a number of pixels from 0 to 30.",
+    "preset": "Choose a preset from the list, or leave it on Custom.",
+    "source_id": "Missing source image. Upload a file, or paste already-uploaded ids, before generating.",
+    "source_ids": "Batch ids must be comma-separated upload ids.",
+    "filter": "Filter must be one of the listed CPU filters.",
+    "flip": "Flip must be none, horizontal, vertical, or both.",
+}
+
+
+def _validation_detail(exc: RequestValidationError) -> str:
+    messages: list[str] = []
+    for err in exc.errors():
+        loc = [str(part) for part in err.get("loc", []) if part not in ("body", "query", "path")]
+        field = loc[-1] if loc else ""
+        help_text = _FIELD_HELP.get(field)
+        if help_text:
+            messages.append(help_text)
+            continue
+        msg = err.get("msg") or "invalid value"
+        messages.append(f"{field}: {msg}" if field else str(msg))
+    deduped = list(dict.fromkeys(messages))
+    if not deduped:
+        return "The request is missing required fields or has invalid values."
+    return " ".join(deduped)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    _request: object, exc: RequestValidationError
+) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": _validation_detail(exc)})
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -221,10 +263,18 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 
 
 def _safe_ext(filename: str | None) -> str:
-    name = (filename or "image.png").lower()
+    name = (filename or "image.png").strip().lower()
     ext = Path(name).suffix
     if ext not in ALLOWED_EXT:
-        raise HTTPException(status_code=400, detail="Use JPEG, PNG, or WebP")
+        shown = ext or "no extension"
+        label = (filename or "upload").strip() or "upload"
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'"{label}" has {shown}, which is not supported. '
+                "Upload a JPEG, PNG, or WebP image (max 12 MB)."
+            ),
+        )
     return ext
 
 
@@ -234,7 +284,10 @@ def _parse_color(value: str) -> tuple[int, int, int] | None:
         return None
     match = _HEX_COLOR_RE.fullmatch(text)
     if not match:
-        raise HTTPException(status_code=400, detail=f"Invalid color: {value}")
+        raise HTTPException(
+            status_code=400,
+            detail=f'"{value}" is not a hex color. Use #rgb or #rrggbb, or leave it blank.',
+        )
     hex_part = match.group(1)
     if len(hex_part) == 3:
         hex_part = "".join(ch * 2 for ch in hex_part)
@@ -251,7 +304,10 @@ def _form_bool(value: str | None) -> bool | None:
         return True
     if text in {"0", "false", "no", "off"}:
         return False
-    raise HTTPException(status_code=400, detail=f"Invalid boolean: {value}")
+    raise HTTPException(
+        status_code=400,
+        detail=f'"{value}" is not a yes/no value. Use 1 or 0 for invert and equalize.',
+    )
 
 
 def _blank_to_none(value: str | None) -> str | None:
@@ -274,7 +330,10 @@ def _resolve_params(preset: str, overrides: dict[str, Any]) -> tuple[str, str, d
         name = ""
     elif name not in PRESETS:
         known = ", ".join(PRESETS)
-        raise HTTPException(status_code=400, detail=f"Unknown preset '{preset}'. Known: {known}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown preset '{preset}'. Known presets: {known}. Choose Custom to edit by hand.",
+        )
     else:
         spec = PRESETS[name]
         params.update(spec["params"])
@@ -303,7 +362,10 @@ def _resolve_params(preset: str, overrides: dict[str, Any]) -> tuple[str, str, d
         try:
             params["max_width"] = int(width)
         except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="max_width must be an integer") from exc
+            raise HTTPException(
+                status_code=400,
+                detail="Max width must be a whole number of pixels. Use 0 to keep the original width.",
+            ) from exc
         if params["max_width"] <= 0:
             params["max_width"] = None
         else:
@@ -311,13 +373,19 @@ def _resolve_params(preset: str, overrides: dict[str, Any]) -> tuple[str, str, d
 
     flip = _FLIP_ALIASES.get(str(params.get("flip") or "").strip().lower())
     if flip is None:
-        raise HTTPException(status_code=400, detail="flip must be none, horizontal, vertical, or both")
+        raise HTTPException(
+            status_code=400,
+            detail="Flip must be none, horizontal, vertical, or both.",
+        )
     params["flip"] = flip
 
     fname = str(params.get("filter") or "none").strip().lower()
     if fname not in _FILTERS:
         known = ", ".join(sorted(_FILTERS))
-        raise HTTPException(status_code=400, detail=f"Unknown filter '{fname}'. Known: {known}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown filter '{fname}'. Known filters: {known}.",
+        )
     params["filter"] = fname
 
     params["invert"] = bool(params.get("invert"))
@@ -493,7 +561,13 @@ def _cpu_generate(img: Image.Image, finish: str = "default") -> Image.Image:
 
 def _find_upload(source_id: str) -> Path:
     if not _ID_RE.fullmatch(source_id):
-        raise HTTPException(status_code=400, detail=f"Invalid image id: {source_id}")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Invalid image id: "{source_id}". '
+                "Upload an image first, or paste a 12-character id."
+            ),
+        )
     matches = sorted(UPLOADS.glob(f"{source_id}.*"))
     if not matches:
         raise HTTPException(status_code=404, detail=f"Source image not found: {source_id}")
@@ -510,10 +584,10 @@ def _parse_id_list(source_id: str, source_ids: str) -> list[str]:
             except json.JSONDecodeError as exc:
                 raise HTTPException(
                     status_code=400,
-                    detail="source_ids must be comma-separated ids or a JSON array",
+                    detail="Batch ids must be comma-separated upload ids, or a JSON array of ids.",
                 ) from exc
             if not isinstance(parsed, list):
-                raise HTTPException(status_code=400, detail="source_ids JSON must be an array")
+                raise HTTPException(status_code=400, detail="Batch ids JSON must be an array of upload ids.")
             raw.extend(str(item).strip() for item in parsed)
         else:
             raw.extend(part.strip() for part in text.replace("\n", ",").split(","))
@@ -528,19 +602,47 @@ def _parse_id_list(source_id: str, source_ids: str) -> list[str]:
         seen.add(item)
         ids.append(item)
     if not ids:
-        raise HTTPException(status_code=400, detail="Provide source_id or source_ids")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Provide source_id or source_ids. "
+                "Upload a JPEG, PNG, or WebP, or paste already-uploaded ids, then generate."
+            ),
+        )
     if len(ids) > MAX_BATCH:
-        raise HTTPException(status_code=400, detail=f"Batch limit is {MAX_BATCH} images")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch limit is {MAX_BATCH} images. Remove some ids and try again.",
+        )
     return ids
 
 
 def _store_upload(filename: str | None, data: bytes) -> dict[str, Any]:
-    ext = _safe_ext(filename)
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=400, detail="File too large (max 12 MB)")
     label = Path(filename or "image").name
+    ext = _safe_ext(filename)
     if not data:
-        raise HTTPException(status_code=400, detail=f"Empty file: {label}")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Empty file: "{label}". '
+                "Choose a JPEG, PNG, or WebP image that contains image data."
+            ),
+        )
+    if len(data) > MAX_BYTES:
+        if MAX_BYTES >= 1024 * 1024:
+            limit = f"{MAX_BYTES / (1024 * 1024):.0f} MB"
+            size_mb = len(data) / (1024 * 1024)
+            shown = f"{size_mb:.1f} MB" if size_mb >= (MAX_BYTES / (1024 * 1024)) + 0.05 else f"just over {limit}"
+        else:
+            limit = f"{MAX_BYTES} bytes"
+            shown = f"{len(data)} bytes"
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'File too large: "{label}" is {shown}, over the {limit} limit. '
+                "Choose a smaller JPEG, PNG, or WebP."
+            ),
+        )
 
     job_id = uuid.uuid4().hex[:12]
     dest = UPLOADS / f"{job_id}{ext}"
@@ -549,10 +651,34 @@ def _store_upload(filename: str | None, data: bytes) -> dict[str, Any]:
         with Image.open(dest) as im:
             im.load()
             w, h = im.size
-            fmt = im.format or ext.lstrip(".")
-    except OSError as exc:
+            fmt_name = (im.format or "").upper()
+            if fmt_name == "MPO":
+                fmt_name = "JPEG"
+            if fmt_name not in {"JPEG", "PNG", "WEBP"}:
+                dest.unlink(missing_ok=True)
+                shown = fmt_name or "an unsupported format"
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                    f'"{label}" is not a valid image. It decoded as {shown}. '
+                    "Upload a JPEG, PNG, or WebP."
+                ),
+                )
+            fmt = fmt_name
+    except HTTPException:
+        raise
+    except (OSError, Image.DecompressionBombError) as exc:
         dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=f"Not a valid image: {label}") from exc
+        detail = (
+            f'"{label}" is not a valid image. '
+            "It may be corrupt, or not a real JPEG, PNG, or WebP."
+        )
+        if isinstance(exc, Image.DecompressionBombError):
+            detail = (
+                f'"{label}" is too large to process safely. '
+                "Resize it and upload a JPEG, PNG, or WebP under 12 MB."
+            )
+        raise HTTPException(status_code=400, detail=detail) from exc
 
     return {
         "id": job_id,
@@ -595,7 +721,13 @@ def _process_one(
             edited = _apply_edits(im, params)
             result = _cpu_generate(edited, str(params.get("finish") or "default"))
     except OSError as exc:
-        raise HTTPException(status_code=400, detail=f"Could not process image {source_id}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Could not process image {source_id}. "
+                "Upload it again, or try a different JPEG, PNG, or WebP."
+            ),
+        ) from exc
 
     out_name = f"{source_id}_{uuid.uuid4().hex[:8]}.png"
     out_path = OUTPUTS / out_name
@@ -644,9 +776,18 @@ def presets() -> dict[str, Any]:
 async def upload(request: Request) -> dict[str, Any]:
     incoming = await _uploads_from_request(request)
     if not incoming:
-        raise HTTPException(status_code=400, detail="No files uploaded")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No files uploaded. "
+                "Choose one or more JPEG, PNG, or WebP images (max 12 MB each)."
+            ),
+        )
     if len(incoming) > MAX_BATCH:
-        raise HTTPException(status_code=400, detail=f"Batch limit is {MAX_BATCH} images")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch limit is {MAX_BATCH} images. Choose fewer files and try again.",
+        )
 
     stored: list[dict[str, Any]] = []
     try:
@@ -745,7 +886,7 @@ def gallery() -> dict[str, Any]:
 def media_upload(name: str) -> FileResponse:
     path = UPLOADS / Path(name).name
     if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="That uploaded image was not found.")
     return FileResponse(path)
 
 
@@ -753,7 +894,7 @@ def media_upload(name: str) -> FileResponse:
 def media_output(name: str) -> FileResponse:
     path = OUTPUTS / Path(name).name
     if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="That result image was not found.")
     return FileResponse(path)
 
 
