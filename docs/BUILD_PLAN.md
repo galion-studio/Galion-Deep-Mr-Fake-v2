@@ -28,7 +28,7 @@ Hard locks (same as Galion Voice):
 
 ## V2 release checklist
 
-**v2.0.0** is the working release of this consent-first CPU image toolkit. The running app reports **0.2.0** (`FastAPI` metadata and the README status line) while this checklist is the gate for that tag.
+**v2.0.0** is the working release of this consent-first CPU image toolkit. The items below are that gate. The FastAPI app and the README status line report **0.2.0**.
 
 - [x] **Runnable web UI** — upload, edit, generate, and a before/after gallery (`web/`)
 - [x] **CPU pipeline** — Generate is a CPU/RAM Pillow path (presets, extra ops, batch). No GPU dependency
