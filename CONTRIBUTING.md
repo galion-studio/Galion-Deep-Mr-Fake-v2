@@ -19,11 +19,22 @@ Thanks for helping. This is a **public MIT** Galion side project. Keep changes s
 
 ## Development
 
+From the repository root:
+
 ```bash
-cd web && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app:app --reload --port 8765
+make install
+make run
 ```
+
+CPU-only Docker, publishing port 8765:
+
+```bash
+docker compose up --build
+```
+
+Lint and format with Ruff (`make lint`, `make format`). Black is pinned at the same line length in `requirements-dev.txt` and `pyproject.toml`.
+
+Manual venv commands, image details, and how to run pytest when `web/tests` is present: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Questions
 

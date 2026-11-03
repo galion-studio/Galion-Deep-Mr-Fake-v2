@@ -1,0 +1,22 @@
+# Lint and format for the web app.
+# Rule set is Ruff's default (E4, E7, E9, F) so `make lint` does not
+# require a rewrite of the existing FastAPI app.
+# Line length 100 matches that module today, so `make format` leaves it
+# unchanged. Black should use the same length (see docs/DEVELOPMENT.md).
+
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    ".venv",
+    "web/.venv",
+    "web/uploads",
+    "web/outputs",
+]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
