@@ -55,7 +55,9 @@ Open http://127.0.0.1:8765
 web/
   app.py              # FastAPI app + image pipeline
   requirements.txt
+  requirements-dev.txt
   README.md
+  tests/              # pytest suite (synthetic Pillow images)
   templates/index.html
   static/app.css
   static/app.js
@@ -78,3 +80,14 @@ Do not upload images of real people without their permission. Generated/transfor
 | GET | `/api/gallery` | List recent before/after pairs |
 | GET | `/media/{kind}/{name}` | Serve upload or output file |
 | GET | `/health` | `{"status":"ok","compute":"cpu"}` |
+
+## Tests
+
+From the repository root (CPU only; tests build tiny images with Pillow and use temporary upload/output directories):
+
+```bash
+pip install -r web/requirements.txt -r web/requirements-dev.txt
+python -m pytest web/tests -q
+```
+
+The same command is what [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on Ubuntu for Python 3.11 and 3.12.
