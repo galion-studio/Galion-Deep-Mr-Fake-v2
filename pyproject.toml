@@ -1,0 +1,6 @@
+# Black only. Ruff lint/format settings are in ruff.toml (same line length).
+# Put pytest configuration in pytest.ini so it can land without editing this file.
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312"]

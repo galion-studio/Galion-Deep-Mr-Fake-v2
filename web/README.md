@@ -13,6 +13,10 @@ Minimal **CPU/RAM-only** single-page app for image upload, basic editing, a ligh
 
 ## Run
 
+From the repository root: `make install` then `make run`. CPU-only Docker: `docker compose up --build` (port 8765). Details: [../docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md).
+
+Manual equivalent:
+
 ```bash
 cd web
 python -m venv .venv
