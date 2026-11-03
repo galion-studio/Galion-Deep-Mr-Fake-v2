@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#f2f2f7" />
+  <title>Consent notice — Galion Deep Mr Fake v2</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body class="page-consent">
+  <a class="skip" href="#notice">Skip to notice</a>
+  <header class="top">
+    <div class="top-inner">
+      <a class="back" href="/">Studio</a>
+      <div class="brand">
+        <h1>Consent notice</h1>
+        <p class="tag">Read this, then agree. Nothing is pre-approved.</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="notice" id="notice">
+    <article class="notice-card">
+    <p class="lede">This studio runs a CPU-only image edit and a lightweight transform. It does not detect faces, swap faces, or clone a person’s identity. Generate stays off until you actively agree.</p>
+
+    <h2>Risks</h2>
+    <p>Image tools can mislead. A crop, a filter, or another transform can be presented as an untouched photograph. Deepfakes and other manipulated media have been used to fake events, impersonate people, commit fraud, and create sexual images of someone without consent. Misuse can harm real people even when the software itself is simple. Do not use this program to deceive, harass, defraud, or sexualize anyone.</p>
+
+    <h2>Open-source freedom</h2>
+    <p>Galion Deep Mr Fake v2 is public MIT-licensed software for research, study, and PhD work, and for ordinary lawful tinkering. Anyone may read it, run it, change it, and share it. We cannot control what users do with that freedom. Publishing the source is not an endorsement of harmful use, and it is not legal advice.</p>
+
+    <h2>The American Constitution and the people</h2>
+    <p>The American Constitution — the Constitution of the United States — opens with “We the People.” It is ordained in the name of the people who constitute that republic. The First Amendment limits Congress from abridging freedom of speech or of the press. The Ninth Amendment says that listing some rights does not deny other rights retained by the people. The Tenth Amendment reserves powers not given to the federal government to the states or to the people.</p>
+    <p>Those clauses are a reference for popular sovereignty and for rights held by the sovereign people. They are not a permission slip from this project, and they do not make harmful or non-consensual images lawful. Criminal law, civil law, privacy law, the GDPR, and the EU AI Act still apply wherever you are.</p>
+
+    <h2>What you agree to</h2>
+    <p>Pressing <strong>Agree</strong> on this page, or <strong>Accept</strong> in the studio, is an active choice for this browser session. It is never checked for you. It means:</p>
+    <ul>
+      <li>You have rights or consent to process the images you submit.</li>
+      <li>You agree not to create harmful content.</li>
+      <li>You are legally responsible for what you create.</li>
+      <li>The program and its authors take no responsibility for what you create with it.</li>
+      <li>You understand this is public MIT open-source software for research and PhDs, and that we cannot police every use.</li>
+    </ul>
+    <p>If you then generate an image, the server writes a <code>.meta.json</code> sidecar beside the file. That record includes a session id, the time, the client IP taken from the request, an anonymous session label (there is no account, and no name is invented), and the agreement flags above.</p>
+
+    <h2>MIT License</h2>
+    <pre id="mit-license" class="license">__LICENSE_TEXT__</pre>
+
+    <form id="consent-agree-form" class="agree-form" method="post" action="/consent/agree">
+      <button type="submit" id="consent-page-agree" class="accept">Agree</button>
+      <p id="consent-page-status" class="consent-done" hidden>Agreed for this session.</p>
+      <a id="consent-home" class="consent-link" href="/?agreed=1">Back to the studio</a>
+    </form>
+    </article>
+  </main>
+
+  <footer>
+    <p>MIT · Galion Studio · Not a face-swap product · <a href="/">Studio</a></p>
+  </footer>
+  <script>
+    (() => {
+      const form = document.getElementById("consent-agree-form");
+      const button = document.getElementById("consent-page-agree");
+      const note = document.getElementById("consent-page-status");
+      const home = document.getElementById("consent-home");
+      if (!form || !button || !window.fetch) return;
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        button.disabled = true;
+        try {
+          const res = await fetch("/api/consent/agree", { method: "POST" });
+          const raw = await res.text();
+          let data = null;
+          try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+          if (!res.ok) {
+            const detail = data && typeof data.detail === "string" ? data.detail : "Could not record agreement.";
+            throw new Error(detail);
+          }
+          note.hidden = false;
+          note.textContent = "Agreed for this session.";
+          button.textContent = "Agreed";
+          if (home) home.focus();
+        } catch (err) {
+          button.disabled = false;
+          note.hidden = false;
+          note.textContent = err.message || "Could not record agreement.";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

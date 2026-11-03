@@ -8,6 +8,7 @@ required and is not imported.
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 import uuid
@@ -17,7 +18,7 @@ from typing import Annotated, Any
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
@@ -36,6 +37,21 @@ MAX_BYTES = 12 * 1024 * 1024  # 12 MB
 MAX_BATCH = 16
 _ID_RE = re.compile(r"^[a-f0-9]{12}$")
 _HEX_COLOR_RE = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_SESSION_RE = re.compile(r"^[a-f0-9]{32}$")
+SESSION_COOKIE = "gdmf_session"
+
+# In-memory for this process. A restart forgets agreement on purpose:
+# nothing is pre-approved, and a cookie alone is not consent.
+_SESSIONS: dict[str, dict[str, Any]] = {}
+
+# Recorded only after an active Agree / Accept for this session.
+# No account system exists, so the user id stays "anonymous".
+RESPONSIBILITY_FLAGS: dict[str, bool] = {
+    "user_agreed_not_to_create_harmful_content": True,
+    "user_is_legally_responsible_for_what_they_create": True,
+    "program_takes_no_responsibility": True,
+    "public_mit_oss_for_research_and_phds": True,
+}
 
 # Keys the UI may override after a preset. `finish` is preset/API-only so a
 # named bundle can pick a CPU finish without the form clobbering it.
@@ -246,6 +262,88 @@ async def validation_error_handler(
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _valid_sid(value: str | None) -> str | None:
+    if value and _SESSION_RE.fullmatch(value):
+        return value
+    return None
+
+
+def _set_session_cookie(response: Any, sid: str) -> None:
+    """Session cookie (no Max-Age). HttpOnly so script cannot mint consent."""
+    response.set_cookie(
+        SESSION_COOKIE,
+        sid,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
+
+
+def _ensure_session(request: Request, response: Any) -> str:
+    """Attach a session id without recording agreement."""
+    sid = _valid_sid(request.cookies.get(SESSION_COOKIE))
+    if sid:
+        return sid
+    sid = uuid.uuid4().hex
+    _set_session_cookie(response, sid)
+    return sid
+
+
+def _mark_agreed(request: Request) -> str:
+    """Record an active agreement. Does not invent a personal identity."""
+    sid = _valid_sid(request.cookies.get(SESSION_COOKIE)) or uuid.uuid4().hex
+    _SESSIONS[sid] = {
+        "session_id": sid,
+        "consent_agreed": True,
+        "agreed_at": _utc_now(),
+        "user_id": "anonymous",
+        "user_label": f"session:{sid}",
+        "responsibility": dict(RESPONSIBILITY_FLAGS),
+    }
+    return sid
+
+
+def _agreement(request: Request) -> dict[str, Any] | None:
+    sid = _valid_sid(request.cookies.get(SESSION_COOKIE))
+    if not sid:
+        return None
+    record = _SESSIONS.get(sid)
+    if not record or not record.get("consent_agreed"):
+        return None
+    return record
+
+
+def _require_agreement(request: Request) -> dict[str, Any]:
+    record = _agreement(request)
+    if not record:
+        raise HTTPException(
+            status_code=403,
+            detail="Agree to the consent notice before generating.",
+        )
+    return record
+
+
+def _client_ip(request: Request) -> str:
+    """Connecting address from the request. No personal profile is created."""
+    client = request.client
+    if client and client.host:
+        return str(client.host)
+    return "unknown"
+
+
+def embed_imperceptible_mark(image_path: Path, sidecar: dict[str, Any]) -> None:
+    """Phase 2 hook. Not implemented.
+
+    Later, this would bake ``session_id`` and ``created_at`` into the PNG as
+    imperceptible noise or a watermark so a detector can recognize the file
+    without the ``.meta.json`` sidecar. Generate must not call it.
+    """
+    raise NotImplementedError(
+        f"Phase 2 imperceptible mark is not implemented ({image_path.name}, "
+        f"session {sidecar.get('session_id')})"
+    )
 
 
 def _load_gallery() -> list[dict[str, Any]]:
@@ -724,6 +822,8 @@ def _process_one(
     preset_label: str,
     *,
     consent_attested: bool = False,
+    session: dict[str, Any] | None = None,
+    client_ip: str = "unknown",
 ) -> dict[str, Any]:
     src_path = _find_upload(source_id)
     try:
@@ -748,17 +848,31 @@ def _process_one(
     timestamp = _utc_now()
     meta_name = f"{out_path.stem}.meta.json"
     attested = bool(consent_attested)
+    agreement = session or {}
+    if agreement.get("consent_agreed"):
+        responsibility = dict(agreement.get("responsibility") or RESPONSIBILITY_FLAGS)
+    else:
+        responsibility = {key: False for key in RESPONSIBILITY_FLAGS}
     sidecar = {
         "id": source_id,
         "output": out_name,
         "timestamp": timestamp,
+        "created_at": timestamp,
         "params": params,
         "label": AI_LABEL,
         "consent_attested": attested,
+        "consent_agreed": bool(agreement.get("consent_agreed")),
         "ai_generated": True,
         "preset": preset_name or None,
+        "session_id": agreement.get("session_id"),
+        "client_ip": client_ip,
+        "user_id": agreement.get("user_id") or "anonymous",
+        "user_label": agreement.get("user_label") or "anonymous",
+        "responsibility": responsibility,
     }
     _write_sidecar(meta_name, sidecar)
+    # Phase 2 hook — do not call. Sidecar JSON above is the Phase 1 record.
+    # embed_imperceptible_mark(out_path, sidecar)
 
     label = AI_LABEL if not preset_label else f"{AI_LABEL} · {preset_label}"
     return {
@@ -791,9 +905,71 @@ def _preset_payload() -> dict[str, Any]:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> HTMLResponse:
+def index(request: Request) -> HTMLResponse:
     html = (TEMPLATES / "index.html").read_text(encoding="utf-8")
-    return HTMLResponse(html)
+    response = HTMLResponse(html)
+    _ensure_session(request, response)
+    return response
+
+
+def _consent_html() -> str:
+    template = (TEMPLATES / "consent.html").read_text(encoding="utf-8")
+    license_path = BASE.parent / "LICENSE"
+    license_text = license_path.read_text(encoding="utf-8").strip()
+    return template.replace("__LICENSE_TEXT__", html_lib.escape(license_text))
+
+
+@app.get("/consent", response_class=HTMLResponse)
+def consent_page(request: Request) -> HTMLResponse:
+    """Full notice. Visiting this page does not agree for the user."""
+    response = HTMLResponse(_consent_html())
+    _ensure_session(request, response)
+    return response
+
+
+@app.get("/api/consent/status")
+def consent_status(request: Request) -> JSONResponse:
+    sid = _valid_sid(request.cookies.get(SESSION_COOKIE))
+    fresh = sid is None
+    if fresh:
+        sid = uuid.uuid4().hex
+    record = _SESSIONS.get(sid) if sid else None
+    agreed = bool(record and record.get("consent_agreed"))
+    response = JSONResponse(
+        {
+            "session_id": sid,
+            "consent_agreed": agreed,
+            "user_id": "anonymous",
+        }
+    )
+    if fresh and sid:
+        _set_session_cookie(response, sid)
+    return response
+
+
+@app.post("/api/consent/agree")
+def agree_consent(request: Request) -> JSONResponse:
+    """Active agreement for this session. Not called on page load."""
+    sid = _mark_agreed(request)
+    response = JSONResponse(
+        {
+            "ok": True,
+            "session_id": sid,
+            "consent_agreed": True,
+            "user_id": "anonymous",
+        }
+    )
+    _set_session_cookie(response, sid)
+    return response
+
+
+@app.post("/consent/agree")
+def agree_consent_form(request: Request) -> RedirectResponse:
+    """No-JS path from the consent page. Same agreement record as the API."""
+    sid = _mark_agreed(request)
+    response = RedirectResponse(url="/?agreed=1", status_code=303)
+    _set_session_cookie(response, sid)
+    return response
 
 
 @app.get("/api/presets")
@@ -836,6 +1012,7 @@ async def upload(request: Request) -> dict[str, Any]:
 
 @app.post("/api/generate")
 async def generate(
+    request: Request,
     source_id: str = Form(""),
     source_ids: str = Form(""),
     preset: str = Form(""),
@@ -860,11 +1037,15 @@ async def generate(
 ) -> dict[str, Any]:
     """Edit one image or a batch. One consent flag is copied onto every output.
 
-    `consent_attested` is optional and defaults to false. Each successful image
-    gets its own PNG and a sibling `{stem}.meta.json` provenance sidecar.
+    The session must already have an active agreement (403 otherwise).
+    `consent_attested` is still the image-rights field: optional, default false.
+    Each successful image gets its own PNG and a sibling `{stem}.meta.json`
+    sidecar, including session id, time, client IP, and responsibility flags.
     """
+    agreement = _require_agreement(request)
     ids = _parse_id_list(source_id, source_ids)
     attested = _form_bool(consent_attested) is True
+    client_ip = _client_ip(request)
     preset_name, preset_label, params = _resolve_params(
         preset,
         {
@@ -900,6 +1081,8 @@ async def generate(
                     preset_name,
                     preset_label,
                     consent_attested=attested,
+                    session=agreement,
+                    client_ip=client_ip,
                 )
             )
         except HTTPException as exc:

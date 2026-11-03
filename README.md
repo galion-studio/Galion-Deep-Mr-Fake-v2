@@ -8,7 +8,7 @@ Galion Deep Mr Fake v2 is a **CPU/RAM-only**, consent-first toolkit for **simple
 
 ## Status
 
-**0.2.0** — runnable web UI, CPU pipeline, tests/CI, Docker/DX, consent sidecar, and AI labelling. Repo: [galion-studio/Galion-Deep-Mr-Fake-v2](https://github.com/galion-studio/Galion-Deep-Mr-Fake-v2).
+**0.2.0 (V2 image studio)** — consent-first CPU image edit, minimal web UI, session sidecar, and AI labelling. Video, paid API billing, and GPU capacity are **not** in this release. See [`docs/V3_PLAN.md`](docs/V3_PLAN.md). Repo: [galion-studio/Galion-Deep-Mr-Fake-v2](https://github.com/galion-studio/Galion-Deep-Mr-Fake-v2).
 
 ## Install / usage (web MVP)
 

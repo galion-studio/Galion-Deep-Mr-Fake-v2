@@ -38,6 +38,17 @@
   const presetSelect = document.getElementById("ws-preset");
   const presetHelp = document.getElementById("ws-preset-help");
   const batchInput = document.getElementById("ws-source-ids");
+  const burger = document.getElementById("burger");
+  const panel = document.getElementById("advanced-panel");
+  const backdrop = document.getElementById("advanced-backdrop");
+  const panelClose = document.getElementById("advanced-close");
+  const acceptBtn = document.getElementById("consent-accept");
+  const consentGate = document.getElementById("consent-gate");
+  const consentSentence = document.getElementById("consent-sentence");
+  const consentDone = document.getElementById("consent-done");
+  const consentEl = form.elements.consent_attested;
+  const phoneQuery = window.matchMedia("(max-width: 800px)");
+  let consentReady = false;
 
   const WS_ADJUST = [
     "brightness",
@@ -139,19 +150,108 @@
     return sourceIds.slice();
   }
 
+  function isPhone() {
+    return phoneQuery.matches;
+  }
+
+  function focusableIn(root) {
+    return [...root.querySelectorAll("a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)")]
+      .filter((el) => !el.hidden && el.tabIndex !== -1 && el.getClientRects().length > 0);
+  }
+
+  function openPanel() {
+    if (!isPhone()) return;
+    panel.classList.add("is-open");
+    backdrop.classList.add("is-open");
+    panel.removeAttribute("inert");
+    panel.setAttribute("aria-hidden", "false");
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    burger.setAttribute("aria-expanded", "true");
+    burger.setAttribute("aria-label", "Close advanced settings");
+    document.body.classList.add("sheet-open");
+    const focusInside = () => {
+      if (!panel.classList.contains("is-open")) return;
+      const preferred = document.getElementById("ws-preset");
+      const items = focusableIn(panel);
+      const target = preferred && !preferred.disabled ? preferred : items[0];
+      if (target && document.activeElement !== target) target.focus();
+      if (panel.contains(document.activeElement)) return;
+      if (items[0]) items[0].focus();
+    };
+    focusInside();
+    window.requestAnimationFrame(focusInside);
+  }
+
+  function closePanel(restoreFocus) {
+    const wasOpen = panel.classList.contains("is-open");
+    panel.classList.remove("is-open");
+    backdrop.classList.remove("is-open");
+    burger.setAttribute("aria-expanded", "false");
+    burger.setAttribute("aria-label", "Advanced settings");
+    document.body.classList.remove("sheet-open");
+    if (isPhone()) {
+      panel.setAttribute("inert", "");
+      panel.setAttribute("aria-hidden", "true");
+      panel.removeAttribute("aria-modal");
+      if (wasOpen && restoreFocus) burger.focus();
+    } else {
+      panel.removeAttribute("inert");
+      panel.setAttribute("aria-hidden", "false");
+      panel.setAttribute("role", "region");
+      panel.removeAttribute("aria-modal");
+    }
+  }
+
+  function syncPanelMode() {
+    if (!isPhone()) {
+      panel.classList.remove("is-open");
+      backdrop.classList.remove("is-open");
+      panel.removeAttribute("inert");
+      panel.setAttribute("aria-hidden", "false");
+      panel.setAttribute("role", "region");
+      panel.removeAttribute("aria-modal");
+      burger.setAttribute("aria-expanded", "false");
+      burger.setAttribute("aria-label", "Advanced settings");
+      document.body.classList.remove("sheet-open");
+      return;
+    }
+    if (!panel.classList.contains("is-open")) {
+      panel.setAttribute("inert", "");
+      panel.setAttribute("aria-hidden", "true");
+      panel.setAttribute("role", "dialog");
+      panel.removeAttribute("aria-modal");
+    }
+  }
+
+  function syncConsentGate() {
+    consentGate.classList.toggle("is-accepted", consentReady);
+    if (consentSentence) consentSentence.hidden = consentReady;
+    acceptBtn.hidden = consentReady;
+    if (consentDone) consentDone.hidden = !consentReady;
+    if (consentReady && consentEl) consentEl.checked = true;
+    if (!consentReady && consentEl && !uploading && !generating) consentEl.checked = false;
+  }
+
   function syncControls() {
     const busy = uploading || generating;
+    const locked = !consentReady;
     dropzone.classList.toggle("is-busy", busy);
+    dropzone.classList.toggle("is-locked", locked && !busy);
     dropzone.setAttribute("aria-busy", uploading ? "true" : "false");
-    dropzone.setAttribute("aria-disabled", busy ? "true" : "false");
-    fileInput.disabled = busy;
+    dropzone.setAttribute("aria-disabled", busy || locked ? "true" : "false");
     dropSpinner.hidden = !uploading;
-    generateBtn.disabled = busy || batchIds().length === 0;
+    generateBtn.disabled = busy || locked || batchIds().length === 0;
     generateBtn.setAttribute("aria-busy", generating ? "true" : "false");
     generateSpinner.hidden = !generating;
-    generateLabel.textContent = generating ? "Generating…" : "3. Generate";
+    generateLabel.textContent = generating ? "Generating…" : "Generate";
     resetBtn.disabled = busy;
+    acceptBtn.disabled = busy || consentReady;
     for (const el of form.querySelectorAll("input, select")) el.disabled = busy;
+    fileInput.disabled = busy || locked;
+    if (!consentReady) setHint("Accept the notice before generating.");
+    else if (!batchIds().length) setHint("Upload images, or paste ids, before generating.");
+    else setHint("Adjust edits or pick a preset, then generate.");
     if (!uploading) setDropTitle("");
   }
 
@@ -460,13 +560,29 @@
     }
   }
 
+  function isRadioList(el) {
+    return Boolean(el) && typeof el.length === "number" && el[0] && el[0].type === "radio";
+  }
+
   function setField(name, value) {
     const el = form.elements[name];
     if (!el) return;
-    if (el.type === "checkbox") el.checked = value === true || value === 1 || value === "1";
-    else if (value === null || value === undefined) el.value = "";
-    else el.value = value;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
+    if (el.type === "checkbox") {
+      el.checked = value === true || value === 1 || value === "1" || value === "true";
+    } else if (isRadioList(el)) {
+      const next = value === null || value === undefined || value === "" ? "none" : String(value);
+      for (const radio of el) radio.checked = radio.value === next;
+      const chosen = [...el].find((radio) => radio.checked) || el[0];
+      chosen.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    } else if (value === null || value === undefined) {
+      el.value = "";
+    } else {
+      el.value = value;
+    }
+    if (typeof el.dispatchEvent === "function") {
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
   }
 
   function applyPresetBundle(params) {
@@ -507,6 +623,11 @@
 
   async function uploadFiles(fileList) {
     if (uploading || generating) return;
+    if (!consentReady) {
+      setStatus("Accept the consent notice before processing images.", "error");
+      if (!acceptBtn.hidden) acceptBtn.focus();
+      return;
+    }
     const files = Array.from(fileList || []).filter(Boolean);
     fileInput.value = "";
     const problem = filesProblem(files);
@@ -566,14 +687,15 @@
     previewWrap.classList.add("hidden");
     meta.textContent = "";
     form.reset();
+    if (consentReady && consentEl) consentEl.checked = true;
     presetSelect.value = "";
     presetHelp.textContent = wsPresets.length ? CUSTOM_HELP : presetHelp.textContent;
     syncSliders();
     clearInvalid();
-    setHint("Upload images, or paste ids, before generating.");
     syncControls();
     setStatus("Form reset.", "success");
-    dropzone.focus();
+    if (consentReady) dropzone.focus();
+    else acceptBtn.focus();
   }
 
   [bri, con, sat, shp].forEach((input) => input.addEventListener("input", syncSliders));
@@ -593,8 +715,16 @@
     applyPresetBundle(chosen ? chosen.params : {});
   });
 
+  function requireConsent() {
+    if (consentReady) return true;
+    setStatus("Accept the consent notice before processing images.", "error");
+    if (!acceptBtn.hidden) acceptBtn.focus();
+    return false;
+  }
+
   dropzone.addEventListener("click", () => {
     if (uploading || generating) return;
+    if (!requireConsent()) return;
     fileInput.click();
   });
   dropzone.addEventListener("keydown", (event) => {
@@ -605,6 +735,7 @@
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     if (uploading || generating) return;
+    if (!requireConsent()) return;
     fileInput.click();
   });
   ["dragenter", "dragover"].forEach((name) => {
@@ -623,6 +754,7 @@
   dropzone.addEventListener("drop", (event) => {
     const files = event.dataTransfer ? event.dataTransfer.files : null;
     if (!files || !files.length || uploading || generating) return;
+    if (!requireConsent()) return;
     uploadFiles(files);
   });
   window.addEventListener("dragover", (event) => event.preventDefault());
@@ -634,10 +766,17 @@
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (uploading || generating) return;
+    if (!consentReady) {
+      setStatus("Accept the consent notice before generating.", "error");
+      if (!acceptBtn.hidden) acceptBtn.focus();
+      return;
+    }
+    if (consentEl) consentEl.checked = true;
     const problem = validateForm();
     if (problem) {
       if (problem.field) {
         problem.field.setAttribute("aria-invalid", "true");
+        if (isPhone() && panel.contains(problem.field)) openPanel();
         problem.field.focus();
       }
       setStatus(problem.message, "error");
@@ -664,7 +803,6 @@
     body.append("colorize_white", form.elements.colorize_white.value.trim());
     body.append("invert", form.elements.invert.checked ? "1" : "0");
     body.append("equalize", form.elements.equalize.checked ? "1" : "0");
-    const consentEl = form.elements.consent_attested;
     body.append("consent_attested", consentEl && consentEl.checked ? "true" : "false");
     generating = true;
     syncControls();
@@ -691,7 +829,10 @@
       }
       await loadGallery();
       const first = galleryEl.querySelector(".pair");
-      if (first) first.scrollIntoView({ block: "nearest" });
+      if (first) {
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        first.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+      }
     } catch (err) {
       setStatus(err.message || "Generate failed.", "error");
     } finally {
@@ -701,8 +842,98 @@
   });
 
   resetBtn.addEventListener("click", resetForm);
+
+  burger.addEventListener("click", () => {
+    if (panel.classList.contains("is-open")) closePanel(true);
+    else openPanel();
+  });
+  panelClose.addEventListener("click", () => closePanel(true));
+  backdrop.addEventListener("click", () => closePanel(true));
+  document.addEventListener("keydown", (event) => {
+    if (!isPhone() || !panel.classList.contains("is-open")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePanel(true);
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const items = focusableIn(panel);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!isPhone() || !panel.classList.contains("is-open")) return;
+    if (panel.contains(event.target)) return;
+    const items = focusableIn(panel);
+    if (items[0]) items[0].focus();
+  });
+  if (typeof phoneQuery.addEventListener === "function") phoneQuery.addEventListener("change", syncPanelMode);
+  else if (typeof phoneQuery.addListener === "function") phoneQuery.addListener(syncPanelMode);
+
+  acceptBtn.addEventListener("click", async () => {
+    if (uploading || generating || consentReady) return;
+    acceptBtn.disabled = true;
+    const previous = acceptBtn.textContent;
+    acceptBtn.textContent = "Accepting…";
+    try {
+      const res = await fetch("/api/consent/agree", { method: "POST" });
+      const raw = await res.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+      if (!res.ok) {
+        const detail = data && typeof data.detail === "string" ? data.detail : "Could not record consent.";
+        throw new Error(detail);
+      }
+      consentReady = true;
+      if (consentEl) consentEl.checked = true;
+      acceptBtn.textContent = previous;
+      syncConsentGate();
+      syncControls();
+      setStatus("Consent accepted for this session. Upload an image, then generate.", "success");
+      dropzone.focus();
+    } catch (err) {
+      acceptBtn.disabled = false;
+      acceptBtn.textContent = previous;
+      setStatus(err.message || "Could not record consent.", "error");
+    }
+  });
+
+  async function refreshConsent() {
+    try {
+      const res = await fetch("/api/consent/status");
+      const data = res.ok ? await res.json() : null;
+      if (consentReady) return;
+      consentReady = Boolean(data && data.consent_agreed);
+    } catch {
+      if (consentReady) return;
+      consentReady = false;
+    }
+    syncConsentGate();
+    syncControls();
+  }
+
+  syncPanelMode();
   syncSliders();
   syncControls();
   loadPresets();
   loadGallery();
+  const justAgreed = new URLSearchParams(window.location.search).get("agreed") === "1";
+  refreshConsent().then(() => {
+    if (justAgreed && consentReady) {
+      setStatus("Consent accepted for this session. Upload an image, then generate.", "success");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  });
 })();
