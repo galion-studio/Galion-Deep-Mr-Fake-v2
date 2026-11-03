@@ -1,0 +1,148 @@
+:root {
+  --bg: #0f1218;
+  --card: #171c26;
+  --border: #2a3344;
+  --text: #e8edf7;
+  --muted: #9aa6bc;
+  --accent: #6ea8ff;
+  --accent-2: #7ddea8;
+  --danger: #ff7b7b;
+  --radius: 12px;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 10% -10%, #1a2740, transparent),
+              radial-gradient(900px 500px at 100% 0%, #13251f, transparent),
+              var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.45;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.top h1 { margin: 0; font-size: 1.25rem; font-weight: 650; }
+.top h1 span { color: var(--accent-2); font-weight: 500; }
+.tag { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; }
+.pill {
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+.pill:hover { border-color: var(--accent); color: var(--accent); }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem 1.5rem 2rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem 1.2rem;
+}
+.card.wide { grid-column: 1 / -1; }
+.card h2 { margin: 0 0 0.75rem; font-size: 1rem; }
+
+.dropzone {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone.drag, .dropzone:focus {
+  border-color: var(--accent);
+  background: rgba(110, 168, 255, 0.06);
+  outline: none;
+}
+.link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+.hint, .muted { color: var(--muted); font-size: 0.85rem; }
+.preview-wrap { margin-top: 0.75rem; }
+.preview-wrap img {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: block;
+}
+.meta { margin: 0.4rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.hidden { display: none !important; }
+
+.form { display: flex; flex-direction: column; gap: 0.65rem; }
+.form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
+.form input[type="text"],
+.form input[type="number"],
+.form select {
+  background: #0d1118;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+}
+.form input[type="range"] { width: 100%; }
+button.primary {
+  margin-top: 0.35rem;
+  background: linear-gradient(135deg, #3d7dff, #2bb673);
+  color: #061018;
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary:not(:disabled):hover { filter: brightness(1.05); }
+.status { min-height: 1.2em; font-size: 0.9rem; color: var(--muted); }
+.status.err { color: var(--danger); }
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.85rem;
+}
+.pair {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #10151e;
+}
+.pair .row { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.pair img { width: 100%; height: 140px; object-fit: cover; display: block; background: #000; }
+.pair .cap {
+  padding: 0.55rem 0.65rem 0.7rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.pair .cap strong { color: var(--accent-2); font-weight: 600; }
+.pair a { color: var(--accent); }
+
+footer {
+  text-align: center;
+  padding: 0 1rem 2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+footer a { color: var(--accent); }
+
+@media (max-width: 800px) {
+  .grid { grid-template-columns: 1fr; }
+  .top { flex-direction: column; align-items: flex-start; }
+}
