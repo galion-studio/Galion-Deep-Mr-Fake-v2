@@ -57,5 +57,9 @@ Not in V2:
 
 | Phase | Ships | Does not ship |
 |---|---|---|
-| **V2** | Image MVP UX, active consent, `/consent`, session sidecars, empty mode-switch hook | Video encode, billing, GPU rental, API keys |
+| **V2** | Image MVP UX, active consent, `/consent`, session sidecars, local MCP server, local vector index, empty mode-switch hook | Video encode, billing, GPU rental, API keys, cloud vector stores |
 | **V3** | Video mode, paid pay-as-you-go API, B200 capacity, queue, keys, rate limits | A non-consensual face-swap marketplace |
+
+## Local agent hook
+
+The CPU MCP server and the on-disk vector index ship with the image toolkit. They are documented in [`MCP_AND_VECTOR_STORE.md`](MCP_AND_VECTOR_STORE.md). They do not add video encode, pay-as-you-go billing, a GPU island, or API keys.

@@ -31,6 +31,17 @@ make run HOST=127.0.0.1 PORT=8765
 
 Open http://127.0.0.1:8765. `GET /health` returns `{"status":"ok","compute":"cpu"}`.
 
+## MCP server
+
+The agent surface is a second process. It does not replace `make run`.
+
+```bash
+make mcp        # stdio, for an MCP client on this machine
+make mcp-http   # http://127.0.0.1:8766/mcp
+```
+
+`MCP_PORT` overrides 8766. The HTTP listener stays on loopback. Consent, tools, and the local vector index are documented in [MCP_AND_VECTOR_STORE.md](MCP_AND_VECTOR_STORE.md).
+
 ## Docker
 
 The image is `python:3.12-slim` and installs only `web/requirements.txt`. It does not use a GPU base image. The process listens on `0.0.0.0:8765` inside the container so the published port works. Local `make run` stays on `127.0.0.1`.

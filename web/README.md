@@ -56,6 +56,8 @@ Open http://127.0.0.1:8765
 ```
 web/
   app.py              # FastAPI app + image pipeline
+  mcp_server.py       # MCP stdio + loopback HTTP
+  vectors.py          # local consented-job index
   requirements.txt
   requirements-dev.txt
   README.md
@@ -65,6 +67,7 @@ web/
   static/app.js
   uploads/            # runtime (gitignored except .gitkeep)
   outputs/            # runtime (gitignored except .gitkeep)
+  data/vectors/       # local index (gitignored except .gitkeep)
 ```
 
 ## Consent & labelling
@@ -80,6 +83,8 @@ Each successful output writes a provenance sidecar beside the PNG:
 The sidecar records `timestamp`, `created_at`, `params`, the label **AI-assisted / transformed (CPU)**, `consent_attested`, `consent_agreed`, `session_id`, `client_ip` (the request’s connecting address), `user_id` (`anonymous` — no account is invented), `user_label` (`session:<id>`), responsibility flags, and `ai_generated: true`. The gallery entry carries `ai_generated: true` and the image-rights flag, and the card shows an AI-generated badge. This is a toolkit demo, not a face-swap product.
 
 Phase 2 watermarking is not implemented. `embed_imperceptible_mark` in `app.py` is a hook only and is not called. See [`docs/V3_PLAN.md`](../docs/V3_PLAN.md) for video and paid GPU work, which is also not in this UI.
+
+A consented generate also writes a local vector row under `data/vectors/`. The row keeps job and consent metadata. It does not copy `client_ip`. Agents use the MCP server instead of the browser: [`docs/MCP_AND_VECTOR_STORE.md`](../docs/MCP_AND_VECTOR_STORE.md). From the repo root, `make mcp` (stdio) or `make mcp-http` (loopback).
 
 ## API sketch
 

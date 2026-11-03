@@ -28,3 +28,4 @@ docs
 # Runtime data is created in the image; do not bake local files in.
 web/uploads/*
 web/outputs/*
+web/data/vectors/*

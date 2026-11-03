@@ -14,6 +14,8 @@ web/uploads/*
 !web/uploads/.gitkeep
 web/outputs/*
 !web/outputs/.gitkeep
+web/data/vectors/*
+!web/data/vectors/.gitkeep
 
 # OS / editors
 .DS_Store

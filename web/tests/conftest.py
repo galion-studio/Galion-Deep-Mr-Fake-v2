@@ -21,6 +21,7 @@ for _path in (WEB_ROOT, TESTS_ROOT):
 @pytest.fixture
 def app_module(tmp_path, monkeypatch):
     import app as application
+    import vectors
 
     uploads = tmp_path / "uploads"
     outputs = tmp_path / "outputs"
@@ -30,7 +31,19 @@ def app_module(tmp_path, monkeypatch):
     monkeypatch.setattr(application, "OUTPUTS", outputs)
     monkeypatch.setattr(application, "GALLERY_INDEX", outputs / "gallery.json")
     monkeypatch.setattr(application, "_SESSIONS", {})
+    monkeypatch.setattr(vectors, "VECTOR_ROOT", tmp_path / "vectors")
     return application
+
+
+@pytest.fixture(autouse=True)
+def _repo_vector_dir_untouched():
+    """The suite must not write an index into the repo data directory."""
+    yield
+    root = WEB_ROOT / "data" / "vectors"
+    if not root.is_dir():
+        return
+    leaked = [path.name for path in root.iterdir() if path.name != ".gitkeep"]
+    assert leaked == []
 
 
 @pytest.fixture

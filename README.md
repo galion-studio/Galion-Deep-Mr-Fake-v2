@@ -8,7 +8,7 @@ Galion Deep Mr Fake v2 is a **CPU/RAM-only**, consent-first toolkit for **simple
 
 ## Status
 
-**0.2.0 (V2 image studio)** — consent-first CPU image edit, minimal web UI, session sidecar, and AI labelling. Video, paid API billing, and GPU capacity are **not** in this release. See [`docs/V3_PLAN.md`](docs/V3_PLAN.md). Repo: [galion-studio/Galion-Deep-Mr-Fake-v2](https://github.com/galion-studio/Galion-Deep-Mr-Fake-v2).
+**0.2.0 (V2 image studio)** — consent-first CPU image edit, minimal web UI, session sidecar, and AI labelling. A local MCP server and an on-disk vector index let an agent drive those image jobs. Video, paid API billing, GPU capacity, and cloud vector stores are **not** in this release. See [`docs/V3_PLAN.md`](docs/V3_PLAN.md) and [`docs/MCP_AND_VECTOR_STORE.md`](docs/MCP_AND_VECTOR_STORE.md). Repo: [galion-studio/Galion-Deep-Mr-Fake-v2](https://github.com/galion-studio/Galion-Deep-Mr-Fake-v2).
 
 ## Install / usage (web MVP)
 
@@ -34,6 +34,17 @@ python -m pytest web/tests -q
 ```
 
 GitHub Actions runs that command on Ubuntu for Python 3.11 and 3.12.
+
+## Agents
+
+Galion One, Hermes Research, and Galion Voice can attach to the CPU MCP server as ordinary MCP clients (stdio, or `http://127.0.0.1:8766/mcp`). This repo does not open a connection to those products. Consent is required before upload and generate. The vector index lives under `web/data/vectors/` and stores consented job metadata only.
+
+```bash
+make mcp        # stdio
+make mcp-http   # loopback HTTP
+```
+
+Details, client sketches, and the privacy rules: [`docs/MCP_AND_VECTOR_STORE.md`](docs/MCP_AND_VECTOR_STORE.md).
 
 ## Stack fit
 
