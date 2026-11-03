@@ -65,7 +65,7 @@
   let wsPresets = [];
 
   const EMPTY_COPY =
-    "Upload a source image, adjust the edits or pick a preset, and press Generate. Before and after pairs will show up here, labelled AI-assisted / transformed (CPU).";
+    "Drop a photo and press Generate. Before and after pairs show up here, labelled AI-assisted / transformed (CPU).";
   const CUSTOM_HELP =
     "Custom settings. A preset fills the edit bundle; you can still tweak a control after.";
 
@@ -121,7 +121,7 @@
       dropTitle.textContent = busyText;
       return;
     }
-    dropTitle.append("Drop images here, or ");
+    dropTitle.append("Drop photos here, or ");
     const browse = document.createElement("span");
     browse.className = "link";
     browse.textContent = "browse";
@@ -149,7 +149,7 @@
     generateBtn.disabled = busy || batchIds().length === 0;
     generateBtn.setAttribute("aria-busy", generating ? "true" : "false");
     generateSpinner.hidden = !generating;
-    generateLabel.textContent = generating ? "Generating…" : "3. Generate";
+    generateLabel.textContent = generating ? "Generating…" : "Generate";
     resetBtn.disabled = busy;
     for (const el of form.querySelectorAll("input, select")) el.disabled = busy;
     if (!uploading) setDropTitle("");
@@ -157,6 +157,16 @@
 
   function clearInvalid() {
     for (const el of form.querySelectorAll("[aria-invalid='true']")) el.removeAttribute("aria-invalid");
+  }
+
+  function revealField(field) {
+    if (!field) return;
+    const details = field.closest("details");
+    if (details) details.open = true;
+    window.requestAnimationFrame(() => {
+      field.focus();
+      field.scrollIntoView({ block: "nearest" });
+    });
   }
 
   function extensionOf(name) {
@@ -538,11 +548,11 @@
         items.length > 1
           ? `${items.length} images · first ${first.width}×${first.height} · ids ${idText}`
           : `${first.width}×${first.height} · ${first.format} · source ${first.id}`;
-      setHint("Adjust edits or pick a preset, then generate.");
+      setHint("Ready. Press Generate, or open Advanced to tweak the CPU transform.");
       setStatus(
         items.length > 1
-          ? `${items.length} images uploaded. Adjust edits or pick a preset, then generate.`
-          : "Image uploaded. Adjust edits or pick a preset, then generate.",
+          ? `${items.length} photos uploaded. Press Generate, or open Advanced to tweak the CPU transform.`
+          : "Photo uploaded. Press Generate, or open Advanced to tweak the CPU transform.",
         "success",
       );
     } catch (err) {
@@ -570,7 +580,7 @@
     presetHelp.textContent = wsPresets.length ? CUSTOM_HELP : presetHelp.textContent;
     syncSliders();
     clearInvalid();
-    setHint("Upload images, or paste ids, before generating.");
+    setHint("Upload a photo, or paste ids in Advanced, then generate.");
     syncControls();
     setStatus("Form reset.", "success");
     dropzone.focus();
@@ -638,7 +648,7 @@
     if (problem) {
       if (problem.field) {
         problem.field.setAttribute("aria-invalid", "true");
-        problem.field.focus();
+        revealField(problem.field);
       }
       setStatus(problem.message, "error");
       return;

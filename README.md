@@ -20,7 +20,7 @@ pip install -r requirements.txt
 uvicorn app:app --reload --host 127.0.0.1 --port 8765
 ```
 
-Open http://127.0.0.1:8765 — upload an image, adjust crop/resize/brightness/contrast/filters, click **Generate**, compare before/after in the gallery.
+Open http://127.0.0.1:8765 — drop a photo, optionally attest consent, press **Generate**, and compare before/after. Crop, color, presets, and the other CPU edits live under **Advanced**.
 
 Details: [`web/README.md`](web/README.md).
 

@@ -37,6 +37,43 @@ def test_index_serves_html(client) -> None:
     tag_start = html.rfind("<input", 0, html.index(marker))
     tag = html[tag_start : html.index(">", tag_start) + 1]
     assert "checked" not in tag
+    assert "viewport-fit=cover" in html
+    assert "AI-assisted / transformed (CPU)" in html
+    assert "Not a face-swap product" in html
+    assert html.index('id="dropzone"') < html.index('id="advanced"')
+    assert html.index('id="advanced"') < html.index('id="consent-attested"')
+    assert html.index('id="consent-attested"') < html.index('id="generate-btn"')
+    assert html.index('id="generate-btn"') < html.index('id="gallery"')
+
+    advanced_at = html.index('id="advanced"')
+    open_tag = html[html.rfind("<details", 0, advanced_at) : html.index(">", advanced_at) + 1]
+    assert open_tag.startswith("<details")
+    assert "open" not in open_tag
+
+    advanced_html = html[advanced_at : html.index('id="consent-attested"')]
+    for control_id in (
+        "crop",
+        "max-width",
+        "brightness",
+        "contrast",
+        "filter",
+        "ws-ops",
+        "ws-preset",
+        "rotate",
+        "flip",
+        "saturation",
+        "sharpness",
+        "blur-radius",
+        "posterize",
+        "solarize",
+        "colorize-black",
+        "colorize-white",
+        "invert",
+        "equalize",
+        "ws-source-ids",
+        "reset-btn",
+    ):
+        assert f'id="{control_id}"' in advanced_html
 
 
 def test_gallery_empty(client) -> None:

@@ -2,6 +2,8 @@
 
 Minimal **CPU/RAM-only** single-page app for image upload, Pillow edits, named presets, batch Generate, and a before/after gallery.
 
+The phone-first main screen is the job: upload, a small source preview, the optional consent checkbox, **Generate**, and a compact before/after gallery. Crop, resize, color, filters, presets, batch ids, and **Reset form** sit in a collapsed **Advanced** disclosure. Wide screens keep that job column narrow and place the gallery beside it.
+
 **Stack (recommended):** FastAPI + plain HTML/CSS/JS. No GPU. No Gradio required (Gradio remains an optional faster demo path in `docs/BUILD_PLAN.md`).
 
 ## Features
