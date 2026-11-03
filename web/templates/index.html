@@ -152,6 +152,14 @@
           </div>
         </div>
 
+        <div class="field consent-field">
+          <label class="check" id="consent-field" for="consent-attested">
+            <input id="consent-attested" name="consent_attested" type="checkbox" value="true" />
+            <span>I have rights/consent to process this image</span>
+          </label>
+          <p id="consent-hint" class="hint">Optional. One answer covers every image in this generate. Leave it unchecked to record that consent was not attested.</p>
+        </div>
+
         <div class="actions">
           <button type="submit" id="generate-btn" class="primary" disabled aria-describedby="form-hint">
             <span class="spinner" aria-hidden="true" hidden></span>

@@ -192,6 +192,9 @@ _FILTERS = {
     "edge_enhance",
 }
 
+# Canonical provenance label. Gallery text may append a preset name after this.
+AI_LABEL = "AI-assisted / transformed (CPU)"
+
 app = FastAPI(
     title="Galion Deep Mr Fake v2",
     description="CPU/RAM-only image edit, presets, batch, and lightweight transform",
@@ -708,11 +711,19 @@ async def _uploads_from_request(request: Request) -> list[Any]:
     return incoming
 
 
+def _write_sidecar(meta_name: str, payload: dict[str, Any]) -> None:
+    """Write provenance next to one generate PNG. `meta_name` is a bare filename."""
+    path = OUTPUTS / meta_name
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def _process_one(
     source_id: str,
     params: dict[str, Any],
     preset_name: str,
     preset_label: str,
+    *,
+    consent_attested: bool = False,
 ) -> dict[str, Any]:
     src_path = _find_upload(source_id)
     try:
@@ -729,21 +740,39 @@ def _process_one(
             ),
         ) from exc
 
+    # Unique stem so a batch, or a second run of the same source, keeps its own sidecar.
     out_name = f"{source_id}_{uuid.uuid4().hex[:8]}.png"
     out_path = OUTPUTS / out_name
     result.save(out_path, format="PNG", optimize=True)
 
-    label = "AI-assisted / transformed (CPU)"
-    if preset_label:
-        label = f"{label} · {preset_label}"
+    timestamp = _utc_now()
+    meta_name = f"{out_path.stem}.meta.json"
+    attested = bool(consent_attested)
+    sidecar = {
+        "id": source_id,
+        "output": out_name,
+        "timestamp": timestamp,
+        "params": params,
+        "label": AI_LABEL,
+        "consent_attested": attested,
+        "ai_generated": True,
+        "preset": preset_name or None,
+    }
+    _write_sidecar(meta_name, sidecar)
+
+    label = AI_LABEL if not preset_label else f"{AI_LABEL} · {preset_label}"
     return {
         "id": source_id,
-        "created": _utc_now(),
+        "created": timestamp,
+        "timestamp": timestamp,
         "before": f"/media/uploads/{src_path.name}",
         "after": f"/media/outputs/{out_name}",
         "label": label,
         "preset": preset_name or None,
         "params": params,
+        "ai_generated": True,
+        "consent_attested": attested,
+        "meta": f"/media/outputs/{meta_name}",
     }
 
 
@@ -827,8 +856,15 @@ async def generate(
     colorize_white: str | None = Form(None),
     blur_radius: float | None = Form(None),
     finish: str | None = Form(None),
+    consent_attested: str | None = Form(None),
 ) -> dict[str, Any]:
+    """Edit one image or a batch. One consent flag is copied onto every output.
+
+    `consent_attested` is optional and defaults to false. Each successful image
+    gets its own PNG and a sibling `{stem}.meta.json` provenance sidecar.
+    """
     ids = _parse_id_list(source_id, source_ids)
+    attested = _form_bool(consent_attested) is True
     preset_name, preset_label, params = _resolve_params(
         preset,
         {
@@ -857,7 +893,15 @@ async def generate(
     errors: list[dict[str, str]] = []
     for sid in ids:
         try:
-            entries.append(_process_one(sid, params, preset_name, preset_label))
+            entries.append(
+                _process_one(
+                    sid,
+                    params,
+                    preset_name,
+                    preset_label,
+                    consent_attested=attested,
+                )
+            )
         except HTTPException as exc:
             detail = exc.detail if isinstance(exc.detail, str) else "Could not process image"
             errors.append({"id": sid, "detail": detail})

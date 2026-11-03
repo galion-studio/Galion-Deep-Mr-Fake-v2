@@ -31,7 +31,9 @@ curl -F "source_id=ID_A" -F "rotate=90" -F "flip=horizontal" \
   -F "saturation=0.2" -F "posterize=4" http://127.0.0.1:8765/api/generate
 ```
 
-Generate responses always include `items` (before/after entries), `count`, and `errors`. A one-image success also repeats that entry's fields at the top level (`id`, `before`, `after`, `label`, `params`).
+Generate responses always include `items` (before/after entries), `count`, and `errors`. A one-image success also repeats that entry's fields at the top level (`id`, `before`, `after`, `label`, `params`). Each item also includes `ai_generated: true`, `consent_attested`, `timestamp`, and `meta` (URL of that output's sidecar).
+
+Optional form field `consent_attested` (`true` / `false`, default false) is recorded on every image in the request, including a batch. Omitted means false. Invalid values return 400, same as the other boolean edit flags.
 
 ## Run
 
@@ -67,7 +69,13 @@ web/
 
 ## Consent & labelling
 
-Do not upload images of real people without their permission. Generated/transformed outputs are marked **AI-assisted / transformed** in the UI. This is a toolkit demo, not a face-swap product.
+Do not upload images of real people without their permission. The edit form has an optional checkbox, **I have rights/consent to process this image** (unchecked by default). One answer covers every image in that generate call.
+
+Each successful output writes a provenance sidecar beside the PNG:
+
+`outputs/{source_id}_{suffix}.meta.json`
+
+The sidecar records `timestamp`, `params`, the label **AI-assisted / transformed (CPU)**, `consent_attested`, and `ai_generated: true`. The gallery entry carries `ai_generated: true` and the same consent flag, and the card shows an AI-generated badge. This is a toolkit demo, not a face-swap product.
 
 ## API sketch
 
@@ -76,7 +84,7 @@ Do not upload images of real people without their permission. Generated/transfor
 | GET | `/` | SPA shell |
 | GET | `/api/presets` | Preset bundles and edit defaults |
 | POST | `/api/upload` | Store one image (`file`) or many (`files` / repeated `file`) |
-| POST | `/api/generate` | Apply edits or a `preset` to `source_id` or `source_ids`; return before/after entries |
+| POST | `/api/generate` | Apply edits or a `preset` to `source_id` or `source_ids`; optional `consent_attested` (default false); return before/after entries plus a sidecar per output |
 | GET | `/api/gallery` | List recent before/after pairs |
 | GET | `/media/{kind}/{name}` | Serve upload or output file |
 | GET | `/health` | `{"status":"ok","compute":"cpu"}` |

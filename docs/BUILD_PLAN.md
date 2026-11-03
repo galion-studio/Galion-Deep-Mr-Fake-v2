@@ -19,12 +19,23 @@ Hard locks (same as Galion Voice):
 
 | # | Deliverable | Status | Notes |
 |---|---|---|---|
-| D0 | Public MIT scaffold (LICENSE, README, CoC, CONTRIBUTING, this plan) | done (scaffold) | This repo |
-| D1 | **Web interface** (`web/`) — upload, edit, generate, before/after gallery | MVP shell | See below |
-| D2 | CPU image pipeline (Pillow + optional onnxruntime CPU) | planned | Behind Generate |
-| D3 | Consent / provenance metadata hooks on outputs | planned | Sidecar JSON + visible label |
+| D0 | Public MIT scaffold (LICENSE, README, CoC, CONTRIBUTING, this plan) | done (MVP) | This repo |
+| D1 | **Web interface** (`web/`) — upload, edit, generate, before/after gallery | done (MVP) | FastAPI UI: upload, edits, presets, batch generate, gallery |
+| D2 | CPU image pipeline (Pillow + optional onnxruntime CPU) | done (MVP) | Pillow ops, presets, batch, and CPU finish modes ship. onnxruntime stays optional and is not imported |
+| D3 | Consent / provenance metadata hooks on outputs | done | Per-output sidecar beside each PNG, consent checkbox, `ai_generated: true` on the sidecar and gallery |
 | D4 | Galion One / Voice API client stub | planned | HTTP or local IPC |
 | D5 | Docs: threat model, AI Act labelling checklist | planned | `docs/` |
+
+## V2 release checklist
+
+**v2.0.0** is the working release of this consent-first CPU image toolkit. The items below are that gate. The FastAPI app and the README status line report **0.2.0**.
+
+- [x] **Runnable web UI** — upload, edit, generate, and a before/after gallery (`web/`)
+- [x] **CPU pipeline** — Generate is a CPU/RAM Pillow path (presets, extra ops, batch). No GPU dependency
+- [x] **Tests / CI** — pytest suite and GitHub Actions for the web app (`.github/workflows/ci.yml`, `web/tests`)
+- [x] **Docker / DX** — CPU-only image, Compose, and `make` / dev scripts (`Dockerfile`, `docs/DEVELOPMENT.md`)
+- [x] **Consent sidecar** — every successful generate output writes a sibling `web/outputs/{source_id}_{suffix}.meta.json` (batch-safe form of `{id}_out.meta.json`) with `timestamp`, `params`, label `AI-assisted / transformed (CPU)`, and boolean `consent_attested` (optional form field, default false; one value covers the whole batch)
+- [x] **Labelling** — sidecar and gallery include `ai_generated: true`, and the UI shows the AI-assisted label plus an AI-generated badge
 
 ## D1 — Web interface (recommended tech)
 
@@ -48,10 +59,10 @@ Hard locks (same as Galion Voice):
 
 ## Phased roadmap
 
-1. **Phase 0 (now):** scaffold + web MVP shell with Pillow edits + stub Generate
-2. **Phase 1:** real CPU transform (style / enhancement) + output labelling badge
-3. **Phase 2:** consent record + provenance sidecar; optional Voice/One hook
-4. **Phase 3:** harden for Galion One demo rack (26 CPU nodes class) — rate limits, health, packaging
+1. **Phase 0:** scaffold + web MVP — done
+2. **Phase 1:** CPU transform (Pillow ops, presets, batch) + output labelling — Pillow path and labelling done; onnxruntime still optional
+3. **Phase 2:** consent record + provenance sidecar — done in 0.2.0; Voice/One hook still open (D4)
+4. **Phase 3:** harden for Galion One demo rack (26 CPU nodes class) — Docker/DX packaging is in place; rate limits and the rack rollout are still open
 
 ## Out of scope (v1)
 
