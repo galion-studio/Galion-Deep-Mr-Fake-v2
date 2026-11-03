@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#f2f2f7" />
   <title>Galion Deep Mr Fake v2 — Image studio</title>
   <link rel="stylesheet" href="/static/app.css" />
 </head>
@@ -11,168 +12,237 @@
   <a class="skip" href="#upload-card">Skip to upload</a>
   <header class="top">
     <div class="top-inner">
+      <button
+        type="button"
+        id="burger"
+        class="burger"
+        aria-label="Advanced settings"
+        aria-controls="advanced-panel"
+        aria-expanded="false"
+      >
+        <span class="burger-bars" aria-hidden="true"></span>
+      </button>
       <div class="brand">
-        <h1>Galion Deep Mr Fake <span>v2</span></h1>
-        <p class="tag">CPU/RAM-only image edit + lightweight generate · consent first</p>
+        <h1>
+          <span class="brand-full">Galion Deep Mr Fake</span>
+          <span class="brand-short">Galion</span>
+          <span class="ver">v2</span>
+        </h1>
+        <p class="tag">CPU/RAM-only image edit + lightweight transform · consent first</p>
       </div>
       <a class="pill" href="https://github.com/galion-studio/Galion-Deep-Mr-Fake-v2" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
   </header>
 
+  <!--
+    V3 hook: mode switcher ("Images | Video").
+    Empty in V2. Do not render a video bar, encoder, upload, or GPU control here.
+    V3 fills a top bar on the phone and a top or side switcher on wide screens.
+    Image mode stays the default. id="mode-switch" is the mount point.
+  -->
+  <div id="mode-switch" hidden aria-hidden="true"></div>
+
   <div id="toast" class="toast is-empty" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <main class="grid">
-    <section class="card" id="upload-card" aria-labelledby="upload-heading">
-      <h2 id="upload-heading">1. Upload</h2>
-      <div
-        id="dropzone"
-        class="dropzone"
-        role="button"
-        tabindex="0"
-        aria-disabled="false"
-        aria-busy="false"
-        aria-label="Upload images"
-        aria-describedby="drop-hint"
-      >
-        <p class="drop-title">
-          <span id="drop-spinner" class="spinner" hidden aria-hidden="true"></span>
-          <span id="drop-title">Drop images here, or <span class="link">browse</span></span>
-        </p>
-        <p id="drop-hint" class="hint">JPEG / PNG / WebP · one or more · max 12 MB each · real people only with consent</p>
-      </div>
-      <input
-        id="file"
-        class="visually-hidden"
-        type="file"
-        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-        multiple
-        tabindex="-1"
+  <main class="layout" aria-labelledby="studio-summary">
+    <p id="studio-summary" class="visually-hidden">Image studio. Upload a picture, accept consent, then generate a CPU transform. On a phone, advanced edits are behind the menu. On a wide screen they stay on the page.</p>
+    <form id="edit-form" class="studio form" action="/api/generate" method="post">
+      <section class="card" id="upload-card" aria-labelledby="upload-heading">
+        <h2 id="upload-heading">Upload</h2>
+        <div
+          id="dropzone"
+          class="dropzone"
+          role="button"
+          tabindex="0"
+          aria-disabled="true"
+          aria-busy="false"
+          aria-label="Upload images"
+          aria-describedby="drop-hint"
+        >
+          <div class="drop-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 48" width="42" height="42" focusable="false">
+              <rect x="6" y="10" width="36" height="28" rx="8" fill="none" stroke="currentColor" stroke-width="2"></rect>
+              <circle cx="18" cy="20" r="3" fill="currentColor"></circle>
+              <path d="M10 32l8-8 6 6 4-4 10 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <p class="drop-title">
+            <span id="drop-spinner" class="spinner" hidden aria-hidden="true"></span>
+            <span id="drop-title">Drop images here, or <span class="link">browse</span></span>
+          </p>
+          <p id="drop-hint" class="hint">
+            <span class="hint-long">JPEG / PNG / WebP · one or more · max 12 MB each · real people only with consent</span>
+            <span class="hint-short">JPEG, PNG, or WebP · 12 MB max</span>
+          </p>
+        </div>
+        <input
+          id="file"
+          class="visually-hidden"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+          multiple
+          tabindex="-1"
+          aria-hidden="true"
+        />
+        <div id="preview-wrap" class="preview-wrap hidden">
+          <img id="preview" alt="Source preview" />
+          <p id="meta" class="meta"></p>
+        </div>
+      </section>
+
+      <div id="advanced-backdrop" class="backdrop"></div>
+
+      <section
+        id="advanced-panel"
+        class="card advanced-panel"
+        role="region"
+        aria-labelledby="advanced-heading"
         aria-hidden="true"
-      />
-      <div id="preview-wrap" class="preview-wrap hidden">
-        <img id="preview" alt="Source preview" />
-        <p id="meta" class="meta"></p>
-      </div>
-    </section>
-
-    <section class="card" id="edit-card" aria-labelledby="edit-heading">
-      <h2 id="edit-heading">2. Edit</h2>
-      <form id="edit-form" class="form" aria-labelledby="edit-heading">
-        <div class="field">
-          <label for="crop">Crop <span class="muted">(x, y, width, height in pixels — optional)</span></label>
-          <input id="crop" name="crop" type="text" inputmode="numeric" autocomplete="off" placeholder="e.g. 10, 10, 400, 300" aria-describedby="crop-hint" />
-          <p id="crop-hint" class="hint">Leave blank to keep the full image.</p>
+      >
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-bar">
+          <h2 id="advanced-heading">Advanced</h2>
+          <button type="button" id="advanced-close" class="sheet-done">Done</button>
         </div>
-        <div class="field">
-          <label for="max-width">Max width <span class="muted">(pixels, 0 = keep)</span></label>
-          <input id="max-width" name="max_width" type="number" inputmode="numeric" min="0" max="4096" step="1" value="1024" />
-        </div>
-        <div class="field">
-          <label for="brightness">Brightness <span id="bri-val" class="value">1.00</span></label>
-          <input id="brightness" name="brightness" type="range" min="0.2" max="2.5" step="0.05" value="1" aria-valuemin="0.2" aria-valuemax="2.5" aria-valuenow="1" aria-valuetext="1.00" />
-        </div>
-        <div class="field">
-          <label for="contrast">Contrast <span id="con-val" class="value">1.00</span></label>
-          <input id="contrast" name="contrast" type="range" min="0.2" max="2.5" step="0.05" value="1" aria-valuemin="0.2" aria-valuemax="2.5" aria-valuenow="1" aria-valuetext="1.00" />
-        </div>
-        <div class="field">
-          <label for="filter">Filter</label>
-          <select id="filter" name="filter">
-            <option value="none">None</option>
-            <option value="grayscale">Grayscale</option>
-            <option value="blur">Blur</option>
-            <option value="sharpen">Sharpen</option>
-            <option value="edge">Edge</option>
-            <option value="contour">Contour</option>
-            <option value="emboss">Emboss</option>
-            <option value="detail">Detail</option>
-            <option value="smooth">Smooth</option>
-            <option value="edge_enhance">Edge enhance</option>
-          </select>
-        </div>
-
-        <!-- ws-ops: presets, extra Pillow ops, and batch ids. Namespaced for UI merges. -->
         <div id="ws-ops">
-          <p class="ws-ops-title">Presets &amp; extra CPU edits</p>
-          <div class="field">
-            <label for="ws-preset">Preset</label>
-            <select name="preset" id="ws-preset" aria-describedby="ws-preset-help">
-              <option value="">Custom</option>
-            </select>
-            <p id="ws-preset-help" class="hint"></p>
-          </div>
-          <div class="field">
-            <label for="rotate">Rotate <span class="muted">(degrees, counter-clockwise)</span></label>
-            <input id="rotate" name="rotate" type="number" inputmode="numeric" min="-360" max="360" step="1" value="0" />
-          </div>
-          <div class="field">
-            <label for="flip">Flip</label>
-            <select id="flip" name="flip">
-              <option value="none">None</option>
-              <option value="horizontal">Horizontal</option>
-              <option value="vertical">Vertical</option>
-              <option value="both">Both</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="saturation">Saturation <span id="ws-sat-val" class="value">1.00</span></label>
-            <input id="saturation" name="saturation" type="range" min="0" max="2.5" step="0.05" value="1" aria-valuemin="0" aria-valuemax="2.5" aria-valuenow="1" aria-valuetext="1.00" />
-          </div>
-          <div class="field">
-            <label for="sharpness">Sharpness <span id="ws-shp-val" class="value">1.00</span></label>
-            <input id="sharpness" name="sharpness" type="range" min="0" max="3" step="0.05" value="1" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-valuetext="1.00" />
-          </div>
-          <div class="field">
-            <label for="blur-radius">Blur radius <span class="muted">(px, 0 = off)</span></label>
-            <input id="blur-radius" name="blur_radius" type="number" inputmode="decimal" min="0" max="30" step="0.1" value="0" />
-          </div>
-          <div class="field">
-            <label for="posterize">Posterize bits <span class="muted">(0 = off, 1–8)</span></label>
-            <input id="posterize" name="posterize" type="number" inputmode="numeric" min="0" max="8" step="1" value="0" />
-          </div>
-          <div class="field">
-            <label for="solarize">Solarize <span class="muted">(0 = off, else threshold 1–255)</span></label>
-            <input id="solarize" name="solarize" type="number" inputmode="numeric" min="0" max="255" step="1" value="0" />
-          </div>
-          <div class="field">
-            <label for="colorize-black">Colorize black <span class="muted">(hex, blank = off)</span></label>
-            <input id="colorize-black" name="colorize_black" type="text" placeholder="#0d1b2a" autocomplete="off" />
-          </div>
-          <div class="field">
-            <label for="colorize-white">Colorize white <span class="muted">(hex, blank = off)</span></label>
-            <input id="colorize-white" name="colorize_white" type="text" placeholder="#e0a96d" autocomplete="off" />
-          </div>
-          <div class="field checks">
-            <label class="ws-inline" for="invert"><input id="invert" name="invert" type="checkbox" /> Invert</label>
-            <label class="ws-inline" for="equalize"><input id="equalize" name="equalize" type="checkbox" /> Equalize</label>
-          </div>
-          <div class="field">
-            <label for="ws-source-ids">Batch ids <span class="muted">(optional comma-separated uploads; blank uses the images just uploaded)</span></label>
-            <input id="ws-source-ids" name="batch_ids" type="text" placeholder="abc123def456, 789abc012def" autocomplete="off" />
+          <div class="fields">
+            <div class="field span-2">
+              <label for="ws-preset">Preset</label>
+              <select name="preset" id="ws-preset" aria-describedby="ws-preset-help">
+                <option value="">Custom</option>
+              </select>
+              <p id="ws-preset-help" class="hint"></p>
+            </div>
+
+            <p class="group-label span-2">Frame</p>
+            <div class="field span-2">
+              <label for="crop">Crop <span class="muted">(x, y, width, height — optional)</span></label>
+              <input id="crop" name="crop" type="text" inputmode="numeric" autocomplete="off" placeholder="e.g. 10, 10, 400, 300" aria-describedby="crop-hint" />
+              <p id="crop-hint" class="hint">Leave blank to keep the full image.</p>
+            </div>
+            <div class="field">
+              <label for="max-width">Max width <span class="muted">(px, 0 = keep)</span></label>
+              <input id="max-width" name="max_width" type="number" inputmode="numeric" min="0" max="4096" step="1" value="1024" />
+            </div>
+            <div class="field">
+              <label for="rotate">Rotate <span class="muted">(degrees)</span></label>
+              <input id="rotate" name="rotate" type="number" inputmode="numeric" min="-360" max="360" step="1" value="0" />
+            </div>
+            <div class="field span-2">
+              <span class="field-label" id="flip-label">Flip</span>
+              <div class="segmented" id="flip" role="radiogroup" aria-labelledby="flip-label">
+                <label class="segment"><input type="radio" name="flip" value="none" checked /><span>None</span></label>
+                <label class="segment"><input type="radio" name="flip" value="horizontal" /><span>Horizontal</span></label>
+                <label class="segment"><input type="radio" name="flip" value="vertical" /><span>Vertical</span></label>
+                <label class="segment"><input type="radio" name="flip" value="both" /><span>Both</span></label>
+              </div>
+            </div>
+
+            <p class="group-label span-2">Tone</p>
+            <div class="field">
+              <label for="brightness">Brightness <span id="bri-val" class="value">1.00</span></label>
+              <input id="brightness" name="brightness" type="range" min="0.2" max="2.5" step="0.05" value="1" aria-valuemin="0.2" aria-valuemax="2.5" aria-valuenow="1" aria-valuetext="1.00" />
+            </div>
+            <div class="field">
+              <label for="contrast">Contrast <span id="con-val" class="value">1.00</span></label>
+              <input id="contrast" name="contrast" type="range" min="0.2" max="2.5" step="0.05" value="1" aria-valuemin="0.2" aria-valuemax="2.5" aria-valuenow="1" aria-valuetext="1.00" />
+            </div>
+            <div class="field">
+              <label for="saturation">Saturation <span id="ws-sat-val" class="value">1.00</span></label>
+              <input id="saturation" name="saturation" type="range" min="0" max="2.5" step="0.05" value="1" aria-valuemin="0" aria-valuemax="2.5" aria-valuenow="1" aria-valuetext="1.00" />
+            </div>
+            <div class="field">
+              <label for="sharpness">Sharpness <span id="ws-shp-val" class="value">1.00</span></label>
+              <input id="sharpness" name="sharpness" type="range" min="0" max="3" step="0.05" value="1" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-valuetext="1.00" />
+            </div>
+
+            <p class="group-label span-2">Look</p>
+            <div class="field">
+              <label for="filter">Filter</label>
+              <select id="filter" name="filter">
+                <option value="none">None</option>
+                <option value="grayscale">Grayscale</option>
+                <option value="blur">Blur</option>
+                <option value="sharpen">Sharpen</option>
+                <option value="edge">Edge</option>
+                <option value="contour">Contour</option>
+                <option value="emboss">Emboss</option>
+                <option value="detail">Detail</option>
+                <option value="smooth">Smooth</option>
+                <option value="edge_enhance">Edge enhance</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="blur-radius">Blur radius <span class="muted">(px, 0 = off)</span></label>
+              <input id="blur-radius" name="blur_radius" type="number" inputmode="decimal" min="0" max="30" step="0.1" value="0" />
+            </div>
+            <div class="field">
+              <label for="posterize">Posterize bits <span class="muted">(0 = off)</span></label>
+              <input id="posterize" name="posterize" type="number" inputmode="numeric" min="0" max="8" step="1" value="0" />
+            </div>
+            <div class="field">
+              <label for="solarize">Solarize <span class="muted">(0 = off)</span></label>
+              <input id="solarize" name="solarize" type="number" inputmode="numeric" min="0" max="255" step="1" value="0" />
+            </div>
+            <div class="field">
+              <label for="colorize-black">Colorize black <span class="muted">(hex)</span></label>
+              <input id="colorize-black" name="colorize_black" type="text" placeholder="#0d1b2a" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="colorize-white">Colorize white <span class="muted">(hex)</span></label>
+              <input id="colorize-white" name="colorize_white" type="text" placeholder="#e0a96d" autocomplete="off" />
+            </div>
+            <div class="field span-2 switch-row">
+              <label class="switch" for="invert">
+                <span class="switch-name">Invert</span>
+                <span class="switch-ui">
+                  <input id="invert" name="invert" type="checkbox" />
+                  <span class="track" aria-hidden="true"><span class="knob"></span></span>
+                </span>
+              </label>
+              <label class="switch" for="equalize">
+                <span class="switch-name">Equalize</span>
+                <span class="switch-ui">
+                  <input id="equalize" name="equalize" type="checkbox" />
+                  <span class="track" aria-hidden="true"><span class="knob"></span></span>
+                </span>
+              </label>
+            </div>
+
+            <p class="group-label span-2">Batch</p>
+            <div class="field span-2">
+              <label for="ws-source-ids">Batch ids <span class="muted">(optional, comma-separated)</span></label>
+              <input id="ws-source-ids" name="batch_ids" type="text" placeholder="abc123def456, 789abc012def" autocomplete="off" />
+            </div>
           </div>
         </div>
-
-        <div class="field consent-field">
-          <label class="check" id="consent-field" for="consent-attested">
-            <input id="consent-attested" name="consent_attested" type="checkbox" value="true" />
-            <span>I have rights/consent to process this image</span>
-          </label>
-          <p id="consent-hint" class="hint">Optional. One answer covers every image in this generate. Leave it unchecked to record that consent was not attested.</p>
+        <div class="sheet-footer">
+          <button type="button" id="reset-btn" class="secondary">Reset form</button>
         </div>
+      </section>
 
+      <section class="card action-card" id="edit-card" aria-labelledby="edit-heading">
+        <h2 id="edit-heading" class="action-title">Create</h2>
+        <div id="consent-gate" class="consent-gate" data-consent-field="consent-field">
+          <p id="consent-sentence" class="consent-sentence">Accept to run a CPU-only transform — I have rights/consent to process this image, and I am responsible for what I create.</p>
+          <button type="button" id="consent-accept" class="accept" aria-describedby="consent-sentence">Accept</button>
+          <a class="consent-link" href="/consent">Consent notice</a>
+          <p id="consent-done" class="consent-done" hidden>Consent accepted for this session</p>
+        </div>
+        <input id="consent-attested" name="consent_attested" type="checkbox" value="true" class="visually-hidden" tabindex="-1" aria-hidden="true" />
+        <p id="consent-hint" class="visually-hidden">Accept before any image is processed. One acceptance covers this session. Leave it unaccepted and consent is not attested.</p>
         <div class="actions">
           <button type="submit" id="generate-btn" class="primary" disabled aria-describedby="form-hint">
             <span class="spinner" aria-hidden="true" hidden></span>
-            <span class="btn-label">3. Generate</span>
+            <span class="btn-label">Generate</span>
           </button>
-          <button type="button" id="reset-btn" class="secondary">Reset form</button>
         </div>
-        <p id="form-hint" class="hint">Upload images, or paste ids, before generating.</p>
-      </form>
-    </section>
+        <p id="form-hint" class="hint">Accept the notice before generating.</p>
+      </section>
+    </form>
 
     <section class="card wide" id="gallery-card" aria-labelledby="gallery-heading">
-      <h2 id="gallery-heading">4. Results gallery</h2>
+      <h2 id="gallery-heading">Results</h2>
       <p class="hint">Before / after · outputs labelled <strong>AI-assisted / transformed (CPU)</strong></p>
       <div id="gallery" class="gallery" aria-busy="false">
         <div class="empty">
@@ -184,10 +254,10 @@
   </main>
 
   <footer>
-    <p>MIT · Galion Studio · Not a face-swap product · <a href="https://galion.app">galion.app</a></p>
+    <p>MIT · Galion Studio · Not a face-swap product · <a href="/consent">Consent notice</a> · <a href="https://galion.app">galion.app</a></p>
   </footer>
   <noscript>
-    <p class="noscript">JavaScript is required to upload images and generate results.</p>
+    <p class="noscript">JavaScript is required to upload images and generate results. You can still read and agree on the consent notice.</p>
   </noscript>
   <script src="/static/app.js"></script>
 </body>

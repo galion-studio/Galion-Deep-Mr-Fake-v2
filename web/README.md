@@ -69,22 +69,30 @@ web/
 
 ## Consent & labelling
 
-Do not upload images of real people without their permission. The edit form has an optional checkbox, **I have rights/consent to process this image** (unchecked by default). One answer covers every image in that generate call.
+Do not upload images of real people without their permission. The studio shows a short Accept control (unchecked, never auto-approved) and a link to `GET /consent`. Accept or Agree records a session. Until that happens, the UI blocks processing and `POST /api/generate` returns 403.
+
+`consent_attested` is still the image-rights field (`true` / `false`, default false). The UI sends `true` after Accept. One answer covers every image in that generate call.
 
 Each successful output writes a provenance sidecar beside the PNG:
 
 `outputs/{source_id}_{suffix}.meta.json`
 
-The sidecar records `timestamp`, `params`, the label **AI-assisted / transformed (CPU)**, `consent_attested`, and `ai_generated: true`. The gallery entry carries `ai_generated: true` and the same consent flag, and the card shows an AI-generated badge. This is a toolkit demo, not a face-swap product.
+The sidecar records `timestamp`, `created_at`, `params`, the label **AI-assisted / transformed (CPU)**, `consent_attested`, `consent_agreed`, `session_id`, `client_ip` (the request’s connecting address), `user_id` (`anonymous` — no account is invented), `user_label` (`session:<id>`), responsibility flags, and `ai_generated: true`. The gallery entry carries `ai_generated: true` and the image-rights flag, and the card shows an AI-generated badge. This is a toolkit demo, not a face-swap product.
+
+Phase 2 watermarking is not implemented. `embed_imperceptible_mark` in `app.py` is a hook only and is not called. See [`docs/V3_PLAN.md`](../docs/V3_PLAN.md) for video and paid GPU work, which is also not in this UI.
 
 ## API sketch
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` | SPA shell |
+| GET | `/` | Image studio shell (phone burger for Advanced; denser controls on wide screens) |
+| GET | `/consent` | Full notice (MIT license, risks, agreement). Visiting does not agree |
+| POST | `/consent/agree` | Form agreement, then redirect to `/?agreed=1` |
+| GET | `/api/consent/status` | `{session_id, consent_agreed, user_id}` — starts false |
+| POST | `/api/consent/agree` | Active session agreement. Not called on page load |
 | GET | `/api/presets` | Preset bundles and edit defaults |
 | POST | `/api/upload` | Store one image (`file`) or many (`files` / repeated `file`) |
-| POST | `/api/generate` | Apply edits or a `preset` to `source_id` or `source_ids`; optional `consent_attested` (default false); return before/after entries plus a sidecar per output |
+| POST | `/api/generate` | Requires session agreement (403 otherwise). Optional `consent_attested` (default false). Returns before/after entries plus a sidecar per output |
 | GET | `/api/gallery` | List recent before/after pairs |
 | GET | `/media/{kind}/{name}` | Serve upload or output file |
 | GET | `/health` | `{"status":"ok","compute":"cpu"}` |

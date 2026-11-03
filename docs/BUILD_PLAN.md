@@ -61,8 +61,10 @@ Hard locks (same as Galion Voice):
 
 1. **Phase 0:** scaffold + web MVP — done
 2. **Phase 1:** CPU transform (Pillow ops, presets, batch) + output labelling — Pillow path and labelling done; onnxruntime still optional
-3. **Phase 2:** consent record + provenance sidecar — done in 0.2.0; Voice/One hook still open (D4)
+3. **Phase 2:** consent record + provenance sidecar — done in 0.2.0; Voice/One hook still open (D4). **Not** the image-watermark phase: an imperceptible PNG mark is a later hook only (`embed_imperceptible_mark` in `web/app.py` is unimplemented and must not be called).
 4. **Phase 3:** harden for Galion One demo rack (26 CPU nodes class) — Docker/DX packaging is in place; rate limits and the rack rollout are still open
+
+**V2 vs V3:** this repo’s V2 ships the image job only (upload, active consent, CPU generate, gallery). Video generation, pay-as-you-go Galion API billing, and a separate B200 GPU island are specified in [`V3_PLAN.md`](V3_PLAN.md) and are not implemented here.
 
 ## Out of scope (v1)
 

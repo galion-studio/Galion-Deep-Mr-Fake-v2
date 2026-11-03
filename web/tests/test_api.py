@@ -20,6 +20,16 @@ def _upload(client, name: str = "tiny.png", content: bytes | None = None, conten
     return client.post("/api/upload", files={"file": (name, payload, content_type)})
 
 
+def _agree(client) -> dict:
+    response = client.post("/api/consent/agree")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["consent_agreed"] is True
+    assert body["user_id"] == "anonymous"
+    assert len(body["session_id"]) == 32
+    return body
+
+
 def test_health(client) -> None:
     response = client.get("/health")
     assert response.status_code == 200
@@ -37,6 +47,12 @@ def test_index_serves_html(client) -> None:
     tag_start = html.rfind("<input", 0, html.index(marker))
     tag = html[tag_start : html.index(">", tag_start) + 1]
     assert "checked" not in tag
+    assert 'href="/consent"' in html
+    assert 'id="consent-accept"' in html
+    assert 'id="burger"' in html
+    assert 'id="advanced-panel"' in html
+    assert 'id="mode-switch" hidden' in html
+    assert "<video" not in html.lower()
 
 
 def test_gallery_empty(client) -> None:
@@ -114,6 +130,7 @@ def test_upload_rejects_invalid_image_bytes(client, app_module) -> None:
 
 
 def test_generate_happy_path_updates_gallery_and_media(client, app_module) -> None:
+    _agree(client)
     uploaded = _upload(client, content=image_bytes("PNG", (40, 30), (20, 80, 140)))
     assert uploaded.status_code == 200
     source_id = uploaded.json()["id"]
@@ -173,6 +190,7 @@ def test_generate_happy_path_updates_gallery_and_media(client, app_module) -> No
 
 
 def test_generate_defaults_keep_source_size(client) -> None:
+    _agree(client)
     uploaded = _upload(client, content=image_bytes("PNG", (16, 11)))
     source_id = uploaded.json()["id"]
     response = client.post("/api/generate", data={"source_id": source_id})
@@ -191,6 +209,7 @@ def test_generate_defaults_keep_source_size(client) -> None:
 
 
 def test_generate_rejects_bad_and_missing_sources(client) -> None:
+    _agree(client)
     malformed = client.post("/api/generate", data={"source_id": "does-not-exist"})
     assert malformed.status_code == 400
     assert "invalid image id" in malformed.json()["detail"].lower()
@@ -201,12 +220,14 @@ def test_generate_rejects_bad_and_missing_sources(client) -> None:
 
 
 def test_generate_requires_a_source(client) -> None:
+    _agree(client)
     response = client.post("/api/generate", data={})
     assert response.status_code == 400
     assert "source_id" in response.json()["detail"].lower()
 
 
 def test_generate_prepends_newest_gallery_item(client) -> None:
+    _agree(client)
     first = _upload(client, content=image_bytes("PNG", (8, 8), (10, 10, 10))).json()["id"]
     second = _upload(client, content=image_bytes("PNG", (8, 8), (20, 20, 20))).json()["id"]
     assert client.post("/api/generate", data={"source_id": first}).status_code == 200
@@ -247,6 +268,7 @@ def test_presets_lists_named_bundles(client) -> None:
 
 
 def test_generate_preset_and_field_override(client) -> None:
+    _agree(client)
     source_id = _upload(client, content=image_bytes("PNG", (12, 12), (40, 90, 140))).json()["id"]
     response = client.post(
         "/api/generate",
@@ -271,6 +293,7 @@ def test_generate_preset_and_field_override(client) -> None:
 
 
 def test_generate_rotate_changes_output_size(client) -> None:
+    _agree(client)
     source_id = _upload(client, content=image_bytes("PNG", (20, 10))).json()["id"]
     response = client.post("/api/generate", data={"source_id": source_id, "rotate": "90", "finish": "none"})
     assert response.status_code == 200
@@ -282,6 +305,7 @@ def test_generate_rotate_changes_output_size(client) -> None:
 
 
 def test_upload_batch_and_generate_batch(client, app_module) -> None:
+    _agree(client)
     uploaded = client.post(
         "/api/upload",
         files=[
@@ -321,6 +345,7 @@ def test_upload_batch_and_generate_batch(client, app_module) -> None:
 
 
 def test_generate_batch_reports_partial_errors(client) -> None:
+    _agree(client)
     source_id = _upload(client).json()["id"]
     response = client.post(
         "/api/generate",
@@ -342,6 +367,7 @@ def _sidecar(client, item: dict) -> dict:
 
 
 def test_generate_consent_sidecar_covers_each_batch_output(client, app_module) -> None:
+    agreed = _agree(client)
     uploaded = client.post(
         "/api/upload",
         files=[
@@ -358,6 +384,7 @@ def test_generate_consent_sidecar_covers_each_batch_output(client, app_module) -
     assert omitted_body["count"] == 2
     assert "id" not in omitted_body
     stems = set()
+    session_ids = set()
     for item in omitted_body["items"]:
         assert item["ai_generated"] is True
         assert item["consent_attested"] is False
@@ -367,10 +394,23 @@ def test_generate_consent_sidecar_covers_each_batch_output(client, app_module) -
         assert doc["id"] == item["id"]
         assert doc["label"] == "AI-assisted / transformed (CPU)"
         assert doc["consent_attested"] is False
+        assert doc["consent_agreed"] is True
         assert doc["ai_generated"] is True
         assert doc["timestamp"] == item["timestamp"]
+        assert doc["created_at"] == doc["timestamp"]
+        assert doc["session_id"] == agreed["session_id"]
+        assert doc["client_ip"]
+        assert doc["user_id"] == "anonymous"
+        assert doc["user_label"] == f"session:{agreed['session_id']}"
+        flags = doc["responsibility"]
+        assert flags["user_agreed_not_to_create_harmful_content"] is True
+        assert flags["user_is_legally_responsible_for_what_they_create"] is True
+        assert flags["program_takes_no_responsibility"] is True
+        assert flags["public_mit_oss_for_research_and_phds"] is True
+        assert "watermark" not in doc
         assert doc["params"] == item["params"]
         assert doc["preset"] == "mono"
+        session_ids.add(doc["session_id"])
         png_name = item["after"].rsplit("/", 1)[-1]
         meta_name = item["meta"].rsplit("/", 1)[-1]
         assert png_name == doc["output"]
@@ -378,6 +418,7 @@ def test_generate_consent_sidecar_covers_each_batch_output(client, app_module) -
         assert (app_module.OUTPUTS / meta_name).is_file()
         stems.add(meta_name)
     assert len(stems) == 2
+    assert session_ids == {agreed["session_id"]}
 
     gallery = client.get("/api/gallery").json()["items"]
     assert [item["id"] for item in gallery] == ids
@@ -456,3 +497,65 @@ def test_upload_rejects_empty_request_and_over_batch_limit(client, app_module, m
     assert too_many.status_code == 400
     assert "batch limit" in too_many.json()["detail"].lower()
     assert list(app_module.UPLOADS.iterdir()) == []
+
+
+def test_consent_is_not_auto_approved(client) -> None:
+    page = client.get("/")
+    assert page.status_code == 200
+    notice = client.get("/consent")
+    assert notice.status_code == 200
+    status = client.get("/api/consent/status")
+    assert status.status_code == 200
+    body = status.json()
+    assert body["consent_agreed"] is False
+    assert body["user_id"] == "anonymous"
+    assert len(body["session_id"]) == 32
+
+
+def test_consent_page_states_the_notice(client) -> None:
+    response = client.get("/consent")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    html = response.text
+    license_text = (Path(__file__).resolve().parents[2] / "LICENSE").read_text(encoding="utf-8")
+    assert "__LICENSE_TEXT__" not in html
+    assert "MIT License" in html
+    assert "Permission is hereby granted, free of charge" in html
+    assert "Copyright (c) 2026 Galion Studio / Maciej Grajczyk" in html
+    assert "WITHOUT WARRANTY OF ANY KIND" in html
+    for line in license_text.splitlines():
+        if line and "<" not in line and "&" not in line and '"' not in line:
+            assert line in html
+    assert "American Constitution" in html
+    assert "We the People" in html
+    assert "Ninth Amendment" in html
+    assert "sovereign people" in html
+    assert "deepfake" in html.lower()
+    assert "cannot control what users do with that freedom" in html
+    assert 'action="/consent/agree"' in html
+    assert 'href="/"' in html
+    assert "not a face-swap" in html.lower() or "does not detect faces" in html
+
+
+def test_consent_form_agree_sets_session(client) -> None:
+    before = client.get("/api/consent/status").json()
+    assert before["consent_agreed"] is False
+    response = client.post("/consent/agree", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/?agreed=1"
+    after = client.get("/api/consent/status").json()
+    assert after["consent_agreed"] is True
+    assert after["user_id"] == "anonymous"
+    assert after["session_id"] == before["session_id"]
+
+
+def test_generate_blocked_until_session_consent(client, app_module) -> None:
+    uploaded = _upload(client)
+    source_id = uploaded.json()["id"]
+    response = client.post("/api/generate", data={"source_id": source_id})
+    assert response.status_code == 403
+    assert "consent" in response.json()["detail"].lower()
+    assert client.get("/api/gallery").json()["items"] == []
+    assert list(app_module.OUTPUTS.glob("*.png")) == []
+    assert list(app_module.OUTPUTS.glob("*.meta.json")) == []
+    assert client.get("/api/consent/status").json()["consent_agreed"] is False

@@ -29,6 +29,7 @@ def app_module(tmp_path, monkeypatch):
     monkeypatch.setattr(application, "UPLOADS", uploads)
     monkeypatch.setattr(application, "OUTPUTS", outputs)
     monkeypatch.setattr(application, "GALLERY_INDEX", outputs / "gallery.json")
+    monkeypatch.setattr(application, "_SESSIONS", {})
     return application
 
 
